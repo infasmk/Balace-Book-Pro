@@ -155,8 +155,7 @@ export const storageService = {
     const defaultSettings = {
       darkMode: true,
       currency: 'INR',
-      dailySpendingLimit: 1000,
-      lowBalanceWarning: 2000
+      dailySpendingLimit: 1000
     };
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -167,8 +166,7 @@ export const storageService = {
         return {
           darkMode: data.dark_mode ?? true,
           currency: data.currency ?? 'INR',
-          dailySpendingLimit: data.daily_spending_limit ?? 1000,
-          lowBalanceWarning: data.low_balance_warning ?? 2000
+          dailySpendingLimit: data.daily_spending_limit ?? 1000
         };
       }
     } catch (e) {}
@@ -184,8 +182,7 @@ export const storageService = {
         user_id: session.user.id,
         dark_mode: settings.darkMode,
         currency: settings.currency,
-        daily_spending_limit: settings.dailySpendingLimit,
-        low_balance_warning: settings.lowBalanceWarning
+        daily_spending_limit: settings.dailySpendingLimit
       };
 
       const { error } = await supabase.from('app_settings').upsert(dbPayload);

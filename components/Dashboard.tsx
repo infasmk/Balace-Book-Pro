@@ -3,9 +3,8 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Transaction, Category, TransactionType, AppSettings } from '../types';
 import { CURRENCY_SYMBOL } from '../constants';
 import { isToday, startOfMonth, endOfMonth, isWithinInterval, parseISO, differenceInDays, getDaysInMonth } from 'date-fns';
-import { TrendingUp, TrendingDown, Wallet, AlertCircle, Zap, Target, Heart, ExternalLink, X, AlertOctagon, Sparkles, BellRing, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, AlertCircle, Zap, Target, Heart, X, Sparkles, BellRing } from 'lucide-react';
 import { storageService } from '../services/storageService';
-import { notificationService } from '../services/notificationService';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -37,9 +36,6 @@ const StatCard = ({ title, amount, icon: Icon, colorClass, bgColorClass }: any) 
 
 const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, settings, onNavigateToSettings }) => {
   const [showWelcome, setShowWelcome] = useState(false);
-  const [balanceAcknowledged, setBalanceAcknowledged] = useState(() => {
-    return localStorage.getItem('bbpro_low_balance_ack') === 'true';
-  });
   const user = storageService.getUser();
 
   useEffect(() => {
@@ -128,68 +124,18 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
   }, [transactions, categories]);
 
   const criticalIssues = budgetHealth.filter(h => h.status === 'critical');
-  const isLowBalance = summary.balance < settings.lowBalanceWarning;
-
-  useEffect(() => {
-    if (!isLowBalance && balanceAcknowledged) {
-      setBalanceAcknowledged(false);
-      localStorage.removeItem('bbpro_low_balance_ack');
-    }
-  }, [isLowBalance, balanceAcknowledged]);
-
-  useEffect(() => {
-    if (isLowBalance && !balanceAcknowledged) {
-      notificationService.send(
-        "Low Balance Warning", 
-        `Your balance ${formatCurrency(summary.balance)} is below your threshold. Please verify.`
-      );
-    }
-    
-    if (criticalIssues.length > 0) {
-      const highestBreach = criticalIssues[0];
-      notificationService.send(
-        "Budget Limit Exceeded", 
-        `Limit reached for ${highestBreach.name}.`
-      );
-    }
-  }, [summary.balance, criticalIssues.length, isLowBalance, balanceAcknowledged, settings.lowBalanceWarning]);
-
-  const handleAcknowledge = () => {
-    setBalanceAcknowledged(true);
-    localStorage.setItem('bbpro_low_balance_ack', 'true');
-  };
 
   return (
     <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-6 duration-500 max-w-full overflow-x-hidden pb-32 md:pb-12 min-h-full">
-      <style>{`
-        @keyframes ring-pulse {
-          0% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.4); }
-          70% { box-shadow: 0 0 0 10px rgba(244, 63, 94, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
-        }
-        .animate-ring-pulse {
-          animation: ring-pulse 2s infinite;
-        }
-        @keyframes subtle-glow {
-          0%, 100% { opacity: 0.8; }
-          50% { opacity: 1; filter: brightness(1.2); }
-        }
-        .low-balance-glow {
-          animation: subtle-glow 3s infinite ease-in-out;
-        }
-      `}</style>
-
       {/* Header section */}
       <div className="px-1 flex justify-between items-end gap-2 shrink-0">
         <div className="overflow-hidden">
           <h1 className="text-xl md:text-2xl font-black text-white tracking-tight truncate">{greeting}, {user?.name || 'Guest'}!</h1>
-          <p className="text-slate-500 text-[10px] md:text-sm font-bold truncate">
-            {isLowBalance && !balanceAcknowledged ? 'Critical Verification Required' : 'Status Secure'}
-          </p>
+          <p className="text-slate-500 text-[10px] md:text-sm font-bold truncate">Status Secure</p>
         </div>
-        {(criticalIssues.length > 0 || (isLowBalance && !balanceAcknowledged)) && (
+        {criticalIssues.length > 0 && (
           <div className="relative shrink-0">
-            <div className="w-8 h-8 md:w-10 md:h-10 rounded-2xl bg-rose-500/20 flex items-center justify-center border border-rose-500/30 animate-ring-pulse">
+            <div className="w-8 h-8 md:w-10 md:h-10 rounded-2xl bg-rose-500/20 flex items-center justify-center border border-rose-500/30">
               <BellRing className="w-4 h-4 md:w-5 md:h-5 text-rose-500" />
             </div>
           </div>
@@ -222,66 +168,34 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
       )}
 
       {/* Main Balance Card */}
-      <div className={`p-6 md:p-8 rounded-[32px] shadow-2xl relative overflow-hidden transition-all duration-700 border-2 shrink-0 ${
-        isLowBalance 
-        ? balanceAcknowledged 
-          ? 'bg-slate-900 border-amber-500/30 shadow-amber-900/10'
-          : 'bg-slate-900 border-rose-500 shadow-rose-900/20' 
-        : 'bg-indigo-600 border-indigo-400/20 shadow-indigo-900/20'
-      }`}>
+      <div className="p-6 md:p-8 rounded-[32px] shadow-2xl relative overflow-hidden transition-all duration-700 border-2 shrink-0 bg-indigo-600 border-indigo-400/20 shadow-indigo-900/20">
         <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-          {isLowBalance ? <AlertOctagon className="w-16 h-16 md:w-24 md:h-24 rotate-12" /> : <Wallet className="w-16 h-16 md:w-24 md:h-24 rotate-12" />}
+          <Wallet className="w-16 h-16 md:w-24 md:h-24 rotate-12" />
         </div>
         
         <div className="relative z-10 space-y-3 md:space-y-4">
-          <div className="flex items-center justify-between">
-            <p className={`text-[10px] font-black uppercase tracking-widest ${isLowBalance ? (balanceAcknowledged ? 'text-amber-400' : 'text-rose-400') : 'text-white/70'}`}>
-              Available Balance
-            </p>
-            {isLowBalance && (
-              <span className={`${balanceAcknowledged ? 'bg-amber-500/20 text-amber-500' : 'bg-rose-500 text-white animate-pulse'} text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter shrink-0 ml-2`}>
-                {balanceAcknowledged ? 'Verified' : 'Action Required'}
-              </span>
-            )}
-          </div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-white/70">
+            Available Balance
+          </p>
           
-          <h2 className={`text-4xl md:text-5xl font-black tracking-tighter break-all ${isLowBalance ? (balanceAcknowledged ? 'text-amber-500' : 'text-rose-500 low-balance-glow') : 'text-white'}`}>
+          <h2 className="text-4xl md:text-5xl font-black tracking-tighter break-all text-white">
             {formatCurrency(summary.balance)}
           </h2>
           
-          {isLowBalance && !balanceAcknowledged && (
-            <button 
-              onClick={handleAcknowledge}
-              className="w-full md:w-fit flex items-center justify-center gap-2 px-5 py-3 bg-rose-500 hover:bg-rose-400 text-white rounded-2xl text-[11px] md:text-xs font-black transition-all active:scale-95 shadow-xl shadow-rose-900/40"
-            >
-              <ShieldCheck className="w-4 h-4" />
-              Confirm Security Check
-            </button>
-          )}
-
-          {isLowBalance && balanceAcknowledged && (
-            <div className="flex items-center gap-2 text-amber-500/60 text-[9px] md:text-[10px] font-black uppercase tracking-widest bg-amber-500/5 py-1 px-3 rounded-lg w-fit">
-              <CheckCircle2 className="w-3 h-3" />
-              Security Acknowledged
-            </div>
-          )}
-          
-          {!isLowBalance && (
-            <div className="flex flex-wrap items-center gap-2 pt-1 md:pt-2">
-               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl backdrop-blur-md border bg-white/10 border-white/10 shrink-0">
-                  <Sparkles className="w-3 h-3 text-white/70" />
-                  <span className="text-[9px] md:text-[10px] font-bold text-white">
-                    Out: {formatCurrency(summary.monthExpense)}
-                  </span>
-               </div>
-               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl backdrop-blur-md border bg-white/10 border-white/10 shrink-0">
-                  <TrendingUp className="w-3 h-3 text-white/70" />
-                  <span className="text-[9px] md:text-[10px] font-bold text-white">
-                    Net: {formatCurrency(summary.monthIncome - summary.monthExpense)}
-                  </span>
-               </div>
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2 pt-1 md:pt-2">
+             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl backdrop-blur-md border bg-white/10 border-white/10 shrink-0">
+                <Sparkles className="w-3 h-3 text-white/70" />
+                <span className="text-[9px] md:text-[10px] font-bold text-white">
+                  Out: {formatCurrency(summary.monthExpense)}
+                </span>
+             </div>
+             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl backdrop-blur-md border bg-white/10 border-white/10 shrink-0">
+                <TrendingUp className="w-3 h-3 text-white/70" />
+                <span className="text-[9px] md:text-[10px] font-bold text-white">
+                  Net: {formatCurrency(summary.monthIncome - summary.monthExpense)}
+                </span>
+             </div>
+          </div>
         </div>
       </div>
 
@@ -290,29 +204,13 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
         <StatCard title="Today Out" amount={summary.todayExpense} icon={TrendingDown} colorClass="text-rose-400" bgColorClass="bg-rose-500/10" />
       </div>
 
-      {/* Smart Alerts Center */}
-      {(isLowBalance || criticalIssues.length > 0) && (
+      {/* Critical Budget Breaches */}
+      {criticalIssues.length > 0 && (
         <div className="space-y-2 shrink-0">
           <div className="flex items-center gap-2 px-1">
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Risk Monitor</span>
           </div>
           <div className="grid grid-cols-1 gap-2">
-            {isLowBalance && (
-              <div className={`p-3 md:p-4 border rounded-2xl flex items-center justify-between transition-all ${balanceAcknowledged ? 'bg-slate-900/40 border-slate-800 opacity-60' : 'bg-rose-500/10 border-rose-500/20 shadow-lg shadow-rose-900/5'}`}>
-                <div className="flex items-center gap-3 overflow-hidden">
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${balanceAcknowledged ? 'bg-slate-800' : 'bg-rose-500/20'}`}>
-                    <AlertOctagon className={`w-4 h-4 ${balanceAcknowledged ? 'text-slate-500' : 'text-rose-500'}`} />
-                  </div>
-                  <div className="overflow-hidden">
-                    <p className={`text-[9px] font-black uppercase tracking-widest truncate ${balanceAcknowledged ? 'text-slate-500' : 'text-rose-500'}`}>
-                      {balanceAcknowledged ? 'Verified' : 'Verification Needed'}
-                    </p>
-                    <p className="text-[11px] font-bold text-slate-300 truncate">Threshold: {formatCurrency(settings.lowBalanceWarning)}</p>
-                  </div>
-                </div>
-                {!balanceAcknowledged && <ArrowRight className="w-4 h-4 text-rose-500/50 shrink-0 ml-2" />}
-              </div>
-            )}
             {criticalIssues.map(b => (
               <div key={b.id} className="p-3 md:p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-between">
                 <div className="flex items-center gap-3 overflow-hidden">
@@ -330,7 +228,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
         </div>
       )}
 
-      {/* Budget Pulse Monitor - Guaranteed Visibility */}
+      {/* Budget Pulse Monitor */}
       <div className="bg-slate-900/50 border border-slate-800/60 p-5 md:p-6 rounded-[32px] space-y-5 md:space-y-6 shadow-xl relative overflow-hidden flex-1 min-h-[300px]">
         <div className="absolute top-0 right-0 p-6 opacity-[0.03] pointer-events-none">
           <Target className="w-24 h-24 md:w-32 md:h-32" />
@@ -381,7 +279,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
                 onClick={onNavigateToSettings}
                 className="mt-3 text-[9px] font-black text-indigo-400 uppercase tracking-widest border border-indigo-400/20 px-4 py-2 rounded-xl active:bg-indigo-400/10 transition-colors"
               >
-                Set Limits in Settings
+                Configure Settings
               </button>
             </div>
           )}

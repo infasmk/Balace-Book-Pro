@@ -25,5 +25,4 @@ export interface AppSettings {
   darkMode: boolean;
   currency: string;
   dailySpendingLimit: number;
-  lowBalanceWarning: number;
 }
