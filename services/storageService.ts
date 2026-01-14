@@ -35,24 +35,35 @@ export const storageService = {
     localStorage.setItem(KEYS.USER, JSON.stringify(user));
   },
   
-  // New: Sync default categories to DB so foreign keys don't fail
   syncCategories: async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      // Fetch existing categories to see what's missing
+      const { data: existing, error: fetchError } = await supabase.from('categories').select('id');
+      
+      if (fetchError) {
+        console.error("Failed to check categories:", fetchError.message);
+        return;
+      }
 
-      // Upsert default categories into the database
-      const categoriesToSync = DEFAULT_CATEGORIES.map(cat => ({
+      const existingIds = new Set((existing || []).map(e => e.id));
+      const missing = DEFAULT_CATEGORIES.filter(c => !existingIds.has(c.id)).map(cat => ({
         id: cat.id,
         name: cat.name,
         color: cat.color,
         type: cat.type,
-        user_id: null // System defaults have no user_id
+        user_id: null // System defaults
       }));
-
-      await supabase.from('categories').upsert(categoriesToSync, { onConflict: 'id' });
+      
+      if (missing.length > 0) {
+        const { error: insertError } = await supabase.from('categories').insert(missing);
+        if (insertError) {
+          console.error("Insert Categories Error:", insertError.message);
+        } else {
+          console.log("Categories synced successfully.");
+        }
+      }
     } catch (e) {
-      console.error("Category Sync Error:", e);
+      console.error("Category Sync Logic Error:", e);
     }
   },
 
@@ -87,14 +98,6 @@ export const storageService = {
 
       const validCatId = ensureValidUUID(transaction.categoryId);
 
-      // Verify category exists in DB first to avoid FK error
-      const { data: catCheck } = await supabase.from('categories').select('id').eq('id', validCatId).single();
-      
-      if (!catCheck) {
-        // If missing (rare), try to sync first
-        await storageService.syncCategories();
-      }
-
       const dbPayload = {
         user_id: session.user.id,
         type: transaction.type,
@@ -107,7 +110,24 @@ export const storageService = {
       const { data, error } = await supabase.from('transactions').insert(dbPayload).select();
 
       if (error) {
-        console.error("Supabase Save Error:", error.message);
+        // Self-healing: If FK violation occurs, attempt to insert the specific category and retry
+        if (error.message.includes('foreign key constraint')) {
+          const cat = DEFAULT_CATEGORIES.find(c => c.id === validCatId);
+          if (cat) {
+            await supabase.from('categories').insert({
+              id: cat.id,
+              name: cat.name,
+              color: cat.color,
+              type: cat.type,
+              user_id: null
+            });
+            // Final retry
+            const retry = await supabase.from('transactions').insert(dbPayload).select();
+            if (!retry.error && retry.data) {
+               return { data: retry.data.map(t => ({ ...t, categoryId: t.category_id })), error: null };
+            }
+          }
+        }
         return { data: null, error: error.message };
       }
 

@@ -1,7 +1,6 @@
 
 import { Category, TransactionType } from './types';
 
-// Using valid UUID formats for default categories to prevent database 400 errors
 export const DEFAULT_CATEGORIES: Category[] = [
   { id: '00000000-0000-0000-0000-000000000001', name: 'Salary', color: '#10b981', type: TransactionType.INCOME },
   { id: '00000000-0000-0000-0000-000000000002', name: 'Food', color: '#ef4444', type: TransactionType.EXPENSE, budget: 15000 },
