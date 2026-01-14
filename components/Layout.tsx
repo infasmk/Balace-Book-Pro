@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
   History, 
@@ -9,6 +9,7 @@ import {
   Wallet,
   Zap
 } from 'lucide-react';
+import { supabase } from '../services/supabaseClient';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -23,6 +24,30 @@ const Layout: React.FC<LayoutProps> = ({
   setActiveTab, 
   onAddClick
 }) => {
+  const [isConnected, setIsConnected] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkConnection = async () => {
+      try {
+        // Simple health check query to Supabase
+        const { error } = await supabase.from('profiles').select('id').limit(1);
+        // If error is 401 or null, it means we reached the server (connected)
+        // If error is network related, it's disconnected
+        if (error && error.message.includes('fetch')) {
+          setIsConnected(false);
+        } else {
+          setIsConnected(true);
+        }
+      } catch (e) {
+        setIsConnected(false);
+      }
+    };
+
+    checkConnection();
+    const interval = setInterval(checkConnection, 30000); // Check every 30s
+    return () => clearInterval(interval);
+  }, []);
+
   const navItems = [
     { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
     { id: 'history', label: 'History', icon: History },
@@ -32,6 +57,22 @@ const Layout: React.FC<LayoutProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      <style>
+        {`
+          @keyframes wave-pulse {
+            0% { transform: scale(1); opacity: 0.8; }
+            100% { transform: scale(2); opacity: 0; }
+          }
+          .status-wave {
+            position: absolute;
+            inset: 0;
+            border-radius: 9999px;
+            pointer-events: none;
+            animation: wave-pulse 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+          }
+        `}
+      </style>
+
       {/* Mobile-Friendly Header */}
       <header className="sticky top-0 z-40 w-full flex items-center justify-between px-6 h-16 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/50 shadow-sm transition-all">
         <div className="flex items-center gap-3">
@@ -40,13 +81,26 @@ const Layout: React.FC<LayoutProps> = ({
           </div>
           <span className="font-extrabold text-xl tracking-tight text-white">BalanceBook</span>
         </div>
-        <div className="w-10 h-10 rounded-full bg-slate-800/50 flex items-center justify-center border border-slate-700/50">
-          <Zap className="w-4 h-4 text-indigo-400" />
+        
+        {/* Connection Status Indicator */}
+        <div className="relative">
+          {isConnected !== null && (
+            <div className={`status-wave ${isConnected ? 'bg-emerald-500/40' : 'bg-rose-500/40'}`} />
+          )}
+          <div className={`relative z-10 w-10 h-10 rounded-full bg-slate-800/50 flex items-center justify-center border transition-colors duration-500 ${
+            isConnected === null ? 'border-slate-700/50' : 
+            isConnected ? 'border-emerald-500/30' : 'border-rose-500/30'
+          }`}>
+            <Zap className={`w-4 h-4 transition-colors duration-500 ${
+              isConnected === null ? 'text-slate-500' : 
+              isConnected ? 'text-emerald-400' : 'text-rose-400'
+            }`} />
+          </div>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Desktop Sidebar (visible only on md+) */}
+        {/* Desktop Sidebar */}
         <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-slate-800 bg-slate-900 transition-colors">
           <nav className="flex-1 px-4 py-8 space-y-2">
             {navItems.map((item) => (
@@ -84,7 +138,7 @@ const Layout: React.FC<LayoutProps> = ({
         </p>
       </footer>
 
-      {/* Mobile Navigation (Floating Bottom Bar) */}
+      {/* Mobile Navigation */}
       <nav className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-sm bg-slate-900/90 backdrop-blur-2xl border border-slate-700/50 rounded-[28px] py-2 px-4 flex justify-between items-center shadow-2xl">
         {navItems.map((item) => (
           <button
@@ -106,7 +160,7 @@ const Layout: React.FC<LayoutProps> = ({
         </button>
       </nav>
 
-      {/* Mobile Footer (visible at bottom of scroll) */}
+      {/* Mobile Footer */}
       <div className="md:hidden w-full pb-28 pt-8 px-6 text-center text-xs opacity-50">
         <p>Created by Infas || <a href="https://webbits.space" className="underline">webbits.space</a></p>
       </div>
