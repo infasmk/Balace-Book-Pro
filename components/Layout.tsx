@@ -7,7 +7,8 @@ import {
   Settings as SettingsIcon, 
   Plus, 
   Wallet,
-  Zap
+  Zap,
+  PlusCircle
 } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 
@@ -29,10 +30,7 @@ const Layout: React.FC<LayoutProps> = ({
   useEffect(() => {
     const checkConnection = async () => {
       try {
-        // Simple health check query to Supabase
-        const { error } = await supabase.from('profiles').select('id').limit(1);
-        // If error is 401 or null, it means we reached the server (connected)
-        // If error is network related, it's disconnected
+        const { error } = await supabase.from('transactions').select('id', { count: 'exact', head: true }).limit(1);
         if (error && error.message.includes('fetch')) {
           setIsConnected(false);
         } else {
@@ -44,7 +42,7 @@ const Layout: React.FC<LayoutProps> = ({
     };
 
     checkConnection();
-    const interval = setInterval(checkConnection, 30000); // Check every 30s
+    const interval = setInterval(checkConnection, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -73,7 +71,7 @@ const Layout: React.FC<LayoutProps> = ({
         `}
       </style>
 
-      {/* Mobile-Friendly Header */}
+      {/* Header */}
       <header className="sticky top-0 z-40 w-full flex items-center justify-between px-6 h-16 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/50 shadow-sm transition-all">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-indigo-600 rounded-xl shadow-lg shadow-indigo-500/20">
@@ -82,7 +80,6 @@ const Layout: React.FC<LayoutProps> = ({
           <span className="font-extrabold text-xl tracking-tight text-white">BalanceBook</span>
         </div>
         
-        {/* Connection Status Indicator */}
         <div className="relative">
           {isConnected !== null && (
             <div className={`status-wave ${isConnected ? 'bg-emerald-500/40' : 'bg-rose-500/40'}`} />
@@ -101,42 +98,47 @@ const Layout: React.FC<LayoutProps> = ({
 
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop Sidebar */}
-        <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-slate-800 bg-slate-900 transition-colors">
-          <nav className="flex-1 px-4 py-8 space-y-2">
+        <aside className="hidden md:flex flex-col w-72 h-[calc(100vh-64px)] sticky top-16 border-r border-slate-800 bg-slate-900/50">
+          <div className="px-6 py-8">
+            <button
+              onClick={onAddClick}
+              className="w-full flex items-center justify-center gap-3 px-5 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-[24px] font-black shadow-xl shadow-indigo-600/20 transition-all active:scale-95 group"
+            >
+              <PlusCircle className="w-5 h-5 transition-transform group-hover:rotate-90" />
+              <span>New Entry</span>
+            </button>
+          </div>
+
+          <nav className="flex-1 px-4 space-y-2">
             {navItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
                 className={`w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl transition-all duration-200 ${
                   activeTab === item.id 
-                    ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/20 font-bold' 
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    ? 'bg-slate-800 text-indigo-400 font-bold border border-slate-700 shadow-lg' 
+                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
                 }`}
               >
-                <item.icon className="w-5 h-5" />
+                <item.icon className={`w-5 h-5 ${activeTab === item.id ? 'text-indigo-400' : ''}`} />
                 <span className="text-[15px]">{item.label}</span>
               </button>
             ))}
           </nav>
+
+          <div className="p-8 border-t border-slate-800 text-center">
+            <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] mb-1">Vault Secure</p>
+            <p className="text-[8px] text-slate-600 font-bold italic">© Infas • Web Bits</p>
+          </div>
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto px-4 py-6 md:px-10 md:py-8 pb-32">
-          <div className="max-w-4xl mx-auto space-y-8">
+        <main className="flex-1 overflow-y-auto px-4 py-6 md:px-10 md:py-8 pb-32 md:pb-12 bg-slate-950">
+          <div className="max-w-4xl mx-auto">
             {children}
           </div>
         </main>
       </div>
-
-      {/* Footer (Desktop Only) */}
-      <footer className="hidden md:block w-full py-6 px-8 border-t border-slate-800 bg-slate-900/50 text-center text-sm">
-        <p className="text-slate-500">
-          Created by <span className="font-bold text-white">Infas</span> || From 
-          <a href="https://webbits.space" target="_blank" rel="noopener noreferrer" className="ml-1 font-bold text-indigo-400 hover:text-indigo-300">
-            Web Bits
-          </a>
-        </p>
-      </footer>
 
       {/* Mobile Navigation */}
       <nav className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-sm bg-slate-900/90 backdrop-blur-2xl border border-slate-700/50 rounded-[28px] py-2 px-4 flex justify-between items-center shadow-2xl">
@@ -159,11 +161,6 @@ const Layout: React.FC<LayoutProps> = ({
           <Plus className="w-6 h-6" />
         </button>
       </nav>
-
-      {/* Mobile Footer */}
-      <div className="md:hidden w-full pb-28 pt-8 px-6 text-center text-xs opacity-50">
-        <p>Created by Infas || <a href="https://webbits.space" className="underline">webbits.space</a></p>
-      </div>
     </div>
   );
 };

@@ -1,3 +1,4 @@
+
 import { Transaction, Category, AppSettings } from '../types';
 import { supabase } from './supabaseClient';
 
@@ -22,8 +23,13 @@ export const storageService = {
     try {
       const { data, error } = await supabase.from('transactions').select('*').order('date', { ascending: false });
       if (data && !error) {
-        localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(data));
-        return data;
+        // Map snake_case from DB to camelCase for App
+        const mapped = data.map(t => ({
+          ...t,
+          categoryId: t.category_id // Map DB column to internal type
+        }));
+        localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(mapped));
+        return mapped;
       }
     } catch (e) {
       console.error("Supabase fetch error", e);
@@ -33,12 +39,33 @@ export const storageService = {
   },
 
   saveTransaction: async (transaction: Omit<Transaction, 'id'>) => {
-    const { data, error } = await supabase.from('transactions').insert([transaction]).select();
-    return { data, error };
+    // Get user id from session
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { data: null, error: 'Not authenticated' };
+
+    const dbPayload = {
+      type: transaction.type,
+      amount: transaction.amount,
+      category_id: transaction.categoryId, // Map to DB column
+      date: transaction.date,
+      note: transaction.note,
+      user_id: user.id
+    };
+
+    const { data, error } = await supabase.from('transactions').insert([dbPayload]).select();
+    
+    // Map response back to camelCase
+    const mappedData = data ? data.map(t => ({ ...t, categoryId: t.category_id })) : null;
+    return { data: mappedData, error };
   },
 
   updateTransaction: async (id: string, updates: Partial<Transaction>) => {
-    const { data, error } = await supabase.from('transactions').update(updates).eq('id', id);
+    const dbUpdates: any = { ...updates };
+    if (updates.categoryId) {
+      dbUpdates.category_id = updates.categoryId;
+      delete dbUpdates.categoryId;
+    }
+    const { data, error } = await supabase.from('transactions').update(dbUpdates).eq('id', id);
     return { data, error };
   },
 
