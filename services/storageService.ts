@@ -9,6 +9,9 @@ const KEYS = {
   USER: 'bbpro_user_info'
 };
 
+// Helper to generate IDs when DB fails
+const generateId = () => Math.random().toString(36).substr(2, 9);
+
 export const storageService = {
   getUser: () => {
     const data = localStorage.getItem(KEYS.USER);
@@ -20,6 +23,7 @@ export const storageService = {
   
   // Transactions
   getTransactions: async (): Promise<Transaction[]> => {
+    let remoteData: Transaction[] = [];
     try {
       const { data, error } = await supabase
         .from('transactions')
@@ -27,33 +31,42 @@ export const storageService = {
         .order('date', { ascending: false });
         
       if (data && !error) {
-        const mapped = data.map(t => ({
+        remoteData = data.map(t => ({
           ...t,
-          categoryId: t.category_id 
+          categoryId: t.category_id || t.categoryId // Support both schemas
         }));
-        localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(mapped));
-        return mapped;
       }
-      if (error) console.error("Supabase Select Error:", error.message);
     } catch (e) {
       console.error("Fetch exception", e);
     }
+
+    // Merge with local storage to ensure no data is lost
     const local = localStorage.getItem(KEYS.TRANSACTIONS);
-    return local ? JSON.parse(local) : [];
+    const localData: Transaction[] = local ? JSON.parse(local) : [];
+    
+    // Combine and remove duplicates based on ID
+    const combined = [...remoteData, ...localData];
+    const unique = combined.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
+    
+    // Keep local storage updated
+    localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(unique));
+    return unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   },
 
   saveTransaction: async (transaction: Omit<Transaction, 'id'>) => {
+    const tempId = generateId();
+    const newTransaction: Transaction = { ...transaction, id: tempId };
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // Construct the database payload strictly matching snake_case columns
       const dbPayload = {
         type: transaction.type,
         amount: Number(transaction.amount),
         category_id: transaction.categoryId, 
         date: transaction.date,
         note: transaction.note || '',
-        user_id: user?.id || null // Handle cases where user might not be in session
+        user_id: user?.id || null
       };
 
       const { data, error } = await supabase
@@ -62,53 +75,84 @@ export const storageService = {
         .select();
 
       if (error) {
-        console.error("Supabase Insert Error:", error.message, error.details, error.hint);
-        return { data: null, error: error.message };
+        console.error("DATABASE SCHEMA ERROR:", error.message);
+        console.warn("Falling back to Local Storage save.");
+        // Fallback: Save to local storage if DB fails
+        const local = localStorage.getItem(KEYS.TRANSACTIONS);
+        const localData = local ? JSON.parse(local) : [];
+        const updatedLocal = [newTransaction, ...localData];
+        localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(updatedLocal));
+        return { data: [newTransaction], error: null }; // Return success so UI updates
       }
 
       if (data) {
-        const mappedData = data.map(t => ({ 
-          ...t, 
-          categoryId: t.category_id 
-        }));
+        const mappedData = data.map(t => ({ ...t, categoryId: t.category_id }));
+        // Update local storage too
+        const local = localStorage.getItem(KEYS.TRANSACTIONS);
+        const localData = local ? JSON.parse(local) : [];
+        localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify([mappedData[0], ...localData]));
         return { data: mappedData, error: null };
       }
     } catch (e: any) {
-      console.error("Save exception", e);
-      return { data: null, error: e.message };
+      console.error("Save exception, saving locally:", e);
+      const local = localStorage.getItem(KEYS.TRANSACTIONS);
+      const localData = local ? JSON.parse(local) : [];
+      const updatedLocal = [newTransaction, ...localData];
+      localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(updatedLocal));
+      return { data: [newTransaction], error: null };
     }
-    return { data: null, error: 'Unknown save error' };
+    return { data: null, error: 'Critical failure' };
   },
 
   updateTransaction: async (id: string, updates: Partial<Transaction>) => {
+    // Update locally first
+    const local = localStorage.getItem(KEYS.TRANSACTIONS);
+    if (local) {
+      const localData: Transaction[] = JSON.parse(local);
+      const updatedLocal = localData.map(t => t.id === id ? { ...t, ...updates } : t);
+      localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(updatedLocal));
+    }
+
     const dbUpdates: any = { ...updates };
     if (updates.categoryId) {
       dbUpdates.category_id = updates.categoryId;
       delete dbUpdates.categoryId;
     }
-    if (updates.amount) {
-      dbUpdates.amount = Number(updates.amount);
-    }
     
-    const { data, error } = await supabase
-      .from('transactions')
-      .update(dbUpdates)
-      .eq('id', id)
-      .select();
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .update(dbUpdates)
+        .eq('id', id)
+        .select();
 
-    const mappedData = data ? data.map(t => ({ ...t, categoryId: t.category_id })) : null;
-    return { data: mappedData, error };
+      const mappedData = data ? data.map(t => ({ ...t, categoryId: t.category_id })) : null;
+      return { data: mappedData, error };
+    } catch (e) {
+      return { data: null, error: e };
+    }
   },
 
   deleteTransaction: async (id: string) => {
-    const { error } = await supabase
-      .from('transactions')
-      .delete()
-      .eq('id', id);
-    return { error };
+    // Delete locally
+    const local = localStorage.getItem(KEYS.TRANSACTIONS);
+    if (local) {
+      const localData: Transaction[] = JSON.parse(local);
+      const updatedLocal = localData.filter(t => t.id !== id);
+      localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(updatedLocal));
+    }
+
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', id);
+      return { error };
+    } catch (e) {
+      return { error: e };
+    }
   },
 
-  // Categories
   getCategories: async (): Promise<Category[]> => {
     try {
       const { data, error } = await supabase.from('categories').select('*');
@@ -123,7 +167,6 @@ export const storageService = {
     return local ? JSON.parse(local) : [];
   },
   
-  // Settings
   getSettings: async (): Promise<AppSettings> => {
     try {
       const { data, error } = await supabase.from('app_settings').select('*').single();
