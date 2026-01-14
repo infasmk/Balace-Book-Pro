@@ -47,56 +47,44 @@ export const storageService = {
 
   saveTransaction: async (transaction: Omit<Transaction, 'id'>) => {
     try {
-      // Re-verify session to ensure user_id is definitely available
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      // FORCE check of session to ensure the token is active
+      const { data: { session } } = await supabase.auth.getSession();
       
-      if (sessionError || !session?.user) {
-        console.error("Auth Session Error:", sessionError);
-        return { data: null, error: "Authentication required to save data." };
+      if (!session || !session.user) {
+        return { data: null, error: "Session expired. Please sign out and sign in again." };
       }
 
-      const userId = session.user.id;
-
       const dbPayload = {
+        user_id: session.user.id,
         type: transaction.type,
         amount: Number(transaction.amount),
         category_id: transaction.categoryId, 
         date: transaction.date,
-        note: transaction.note || '',
-        user_id: userId
+        note: transaction.note || ''
       };
-
-      console.log("Attempting insert with payload:", dbPayload);
 
       const { data, error } = await supabase
         .from('transactions')
-        .insert([dbPayload])
+        .insert(dbPayload)
         .select();
 
       if (error) {
-        // Log details to help user identify if it's RLS or missing columns
-        console.error("Supabase Save Error Details:", {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint
-        });
-        return { data: null, error: error.message };
+        console.error("Supabase Save Error:", error.message, error.details);
+        return { data: null, error: `DB Error: ${error.message}` };
       }
 
       if (data && data.length > 0) {
         const mapped = { ...data[0], categoryId: data[0].category_id };
-        // Sync local storage
         const local = localStorage.getItem(KEYS.TRANSACTIONS);
         const localData = local ? JSON.parse(local) : [];
         localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify([mapped, ...localData]));
         return { data: [mapped], error: null };
       }
     } catch (e: any) {
-      console.error("Critical Save Exception:", e.message);
-      return { data: null, error: e.message };
+      console.error("Critical Save Exception:", e);
+      return { data: null, error: e.message || "Connection failure" };
     }
-    return { data: null, error: 'Database rejected the request.' };
+    return { data: null, error: 'The database did not return the saved record.' };
   },
 
   updateTransaction: async (id: string, updates: Partial<Transaction>) => {
