@@ -6,6 +6,14 @@ import { CURRENCY_SYMBOL } from '../constants';
 import { storageService } from '../services/storageService';
 import { notificationService } from '../services/notificationService';
 
+// Simple UUID generator for new categories
+const generateUUID = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 interface SettingsProps {
   settings: AppSettings;
   updateSettings: (s: AppSettings) => void;
@@ -41,7 +49,7 @@ const Settings: React.FC<SettingsProps> = ({
   const handleAddCategory = () => {
     if (!newCatName) return;
     const newCat: Category = {
-      id: 'cat_' + Date.now(),
+      id: generateUUID(),
       name: newCatName,
       color: newCatColor,
       type: newCatType

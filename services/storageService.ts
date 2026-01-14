@@ -9,6 +9,24 @@ const KEYS = {
   USER: 'bbpro_user_info'
 };
 
+// Helper to ensure we send valid UUID formats for category_id
+const ensureValidUUID = (id: string): string => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(id)) return id;
+  
+  // If it's a legacy 'cat_1' style, we map it to our default UUIDs or return a fixed "Other" UUID
+  const legacyMap: Record<string, string> = {
+    'cat_1': '00000000-0000-0000-0000-000000000001',
+    'cat_2': '00000000-0000-0000-0000-000000000002',
+    'cat_3': '00000000-0000-0000-0000-000000000003',
+    'cat_4': '00000000-0000-0000-0000-000000000004',
+    'cat_5': '00000000-0000-0000-0000-000000000005',
+    'cat_6': '00000000-0000-0000-0000-000000000006',
+  };
+  
+  return legacyMap[id] || '00000000-0000-0000-0000-000000000005'; // Default to "Other"
+};
+
 export const storageService = {
   getUser: () => {
     const data = localStorage.getItem(KEYS.USER);
@@ -25,10 +43,7 @@ export const storageService = {
         .select('*')
         .order('date', { ascending: false });
         
-      if (error) {
-        console.error("Supabase Fetch Error:", error.message);
-        throw error;
-      }
+      if (error) throw error;
 
       if (data) {
         const mapped = data.map(t => ({
@@ -47,18 +62,17 @@ export const storageService = {
 
   saveTransaction: async (transaction: Omit<Transaction, 'id'>) => {
     try {
-      // FORCE check of session to ensure the token is active
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session || !session.user) {
-        return { data: null, error: "Session expired. Please sign out and sign in again." };
+        return { data: null, error: "Authentication session missing." };
       }
 
       const dbPayload = {
         user_id: session.user.id,
         type: transaction.type,
         amount: Number(transaction.amount),
-        category_id: transaction.categoryId, 
+        category_id: ensureValidUUID(transaction.categoryId), 
         date: transaction.date,
         note: transaction.note || ''
       };
@@ -69,8 +83,8 @@ export const storageService = {
         .select();
 
       if (error) {
-        console.error("Supabase Save Error:", error.message, error.details);
-        return { data: null, error: `DB Error: ${error.message}` };
+        console.error("Supabase Save Error:", error.message);
+        return { data: null, error: error.message };
       }
 
       if (data && data.length > 0) {
@@ -81,17 +95,16 @@ export const storageService = {
         return { data: [mapped], error: null };
       }
     } catch (e: any) {
-      console.error("Critical Save Exception:", e);
-      return { data: null, error: e.message || "Connection failure" };
+      return { data: null, error: e.message || "Network error" };
     }
-    return { data: null, error: 'The database did not return the saved record.' };
+    return { data: null, error: 'Database record not returned.' };
   },
 
   updateTransaction: async (id: string, updates: Partial<Transaction>) => {
     try {
       const dbUpdates: any = { ...updates };
       if (updates.categoryId) {
-        dbUpdates.category_id = updates.categoryId;
+        dbUpdates.category_id = ensureValidUUID(updates.categoryId);
         delete dbUpdates.categoryId;
       }
       
@@ -102,9 +115,7 @@ export const storageService = {
         .select();
 
       if (error) throw error;
-
-      const mappedData = data ? data.map(t => ({ ...t, categoryId: t.category_id })) : null;
-      return { data: mappedData, error: null };
+      return { data: data ? data.map(t => ({ ...t, categoryId: t.category_id })) : null, error: null };
     } catch (e: any) {
       return { data: null, error: e.message };
     }
@@ -112,10 +123,7 @@ export const storageService = {
 
   deleteTransaction: async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('transactions')
-        .delete()
-        .eq('id', id);
+      const { error } = await supabase.from('transactions').delete().eq('id', id);
       return { error: error?.message || null };
     } catch (e: any) {
       return { error: e.message };
