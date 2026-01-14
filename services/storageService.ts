@@ -47,8 +47,15 @@ export const storageService = {
 
   saveTransaction: async (transaction: Omit<Transaction, 'id'>) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("No authenticated user found");
+      // Re-verify session to ensure user_id is definitely available
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session?.user) {
+        console.error("Auth Session Error:", sessionError);
+        return { data: null, error: "Authentication required to save data." };
+      }
+
+      const userId = session.user.id;
 
       const dbPayload = {
         type: transaction.type,
@@ -56,8 +63,10 @@ export const storageService = {
         category_id: transaction.categoryId, 
         date: transaction.date,
         note: transaction.note || '',
-        user_id: user.id
+        user_id: userId
       };
+
+      console.log("Attempting insert with payload:", dbPayload);
 
       const { data, error } = await supabase
         .from('transactions')
@@ -65,11 +74,17 @@ export const storageService = {
         .select();
 
       if (error) {
-        console.error("Supabase Save Error:", error.message, error.details);
+        // Log details to help user identify if it's RLS or missing columns
+        console.error("Supabase Save Error Details:", {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        });
         return { data: null, error: error.message };
       }
 
-      if (data) {
+      if (data && data.length > 0) {
         const mapped = { ...data[0], categoryId: data[0].category_id };
         // Sync local storage
         const local = localStorage.getItem(KEYS.TRANSACTIONS);
@@ -81,7 +96,7 @@ export const storageService = {
       console.error("Critical Save Exception:", e.message);
       return { data: null, error: e.message };
     }
-    return { data: null, error: 'Connection failed' };
+    return { data: null, error: 'Database rejected the request.' };
   },
 
   updateTransaction: async (id: string, updates: Partial<Transaction>) => {
