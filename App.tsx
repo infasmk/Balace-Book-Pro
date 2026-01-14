@@ -13,7 +13,6 @@ import { Transaction, Category, AppSettings } from './types';
 import { storageService } from './services/storageService';
 import { DEFAULT_CATEGORIES } from './constants';
 
-// Define the BeforeInstallPromptEvent interface
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
   readonly userChoice: Promise<{
@@ -33,11 +32,9 @@ const App: React.FC = () => {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>(undefined);
   const [loading, setLoading] = useState(false);
 
-  // PWA Installation State
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
 
-  // UI Feedback
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => setToast({ message, type });
 
@@ -45,12 +42,14 @@ const App: React.FC = () => {
     isOpen: boolean; title: string; message: string; onConfirm: () => void; type?: 'danger' | 'primary';
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
-  // Initial Sync
   useEffect(() => {
     const syncData = async () => {
       if (user?.isLoggedIn) {
         setLoading(true);
         try {
+          // First, ensure categories exist in DB to prevent FK errors
+          await storageService.syncCategories();
+
           const [txs, cats, sett] = await Promise.all([
             storageService.getTransactions(),
             storageService.getCategories(),
@@ -70,51 +69,32 @@ const App: React.FC = () => {
     syncData();
   }, [user]);
 
-  // PWA Install Prompt Listener
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
-      // Prevent the default browser banner
       e.preventDefault();
-      // Store the event for later use
-      const promptEvent = e as BeforeInstallPromptEvent;
-      setDeferredPrompt(promptEvent);
-
-      // Check if user already dismissed it recently
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
       const lastDismissed = localStorage.getItem('pwa_install_dismissed');
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-
-      // Only show modal if not installed and not dismissed in this "session"
       if (!isStandalone && !lastDismissed) {
         setShowInstallPrompt(true);
       }
     };
-
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
-
-    // Show the browser's install prompt
     await deferredPrompt.prompt();
-
-    // Wait for the user to respond to the prompt
     const { outcome } = await deferredPrompt.userChoice;
-    
     if (outcome === 'accepted') {
       showToast('Welcome to the native experience!', 'success');
       setDeferredPrompt(null);
     }
-    
     setShowInstallPrompt(false);
   };
 
   const handleCloseInstallPrompt = () => {
-    // Save to localStorage so we don't nag the user
     localStorage.setItem('pwa_install_dismissed', Date.now().toString());
     setShowInstallPrompt(false);
   };
@@ -150,7 +130,7 @@ const App: React.FC = () => {
         setTransactions([newTx[0], ...transactions]);
         showToast('Record Saved');
       } else {
-        showToast('Save Failed', 'error');
+        showToast(error || 'Save Failed', 'error');
       }
     }
     setEditingTransaction(undefined);
@@ -197,13 +177,7 @@ const App: React.FC = () => {
         </>
       )}
 
-      {/* PWA Install Prompt */}
-      {showInstallPrompt && (
-        <InstallPromptModal 
-          onInstall={handleInstallClick} 
-          onClose={handleCloseInstallPrompt} 
-        />
-      )}
+      {showInstallPrompt && <InstallPromptModal onInstall={handleInstallClick} onClose={handleCloseInstallPrompt} />}
 
       <TransactionModal 
         isOpen={isModalOpen} 

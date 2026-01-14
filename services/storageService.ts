@@ -1,6 +1,7 @@
 
 import { Transaction, Category, AppSettings } from '../types';
 import { supabase } from './supabaseClient';
+import { DEFAULT_CATEGORIES } from '../constants';
 
 const KEYS = {
   TRANSACTIONS: 'bbpro_transactions',
@@ -9,12 +10,10 @@ const KEYS = {
   USER: 'bbpro_user_info'
 };
 
-// Helper to ensure we send valid UUID formats for category_id
 const ensureValidUUID = (id: string): string => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (uuidRegex.test(id)) return id;
   
-  // If it's a legacy 'cat_1' style, we map it to our default UUIDs or return a fixed "Other" UUID
   const legacyMap: Record<string, string> = {
     'cat_1': '00000000-0000-0000-0000-000000000001',
     'cat_2': '00000000-0000-0000-0000-000000000002',
@@ -24,7 +23,7 @@ const ensureValidUUID = (id: string): string => {
     'cat_6': '00000000-0000-0000-0000-000000000006',
   };
   
-  return legacyMap[id] || '00000000-0000-0000-0000-000000000005'; // Default to "Other"
+  return legacyMap[id] || '00000000-0000-0000-0000-000000000005';
 };
 
 export const storageService = {
@@ -36,6 +35,27 @@ export const storageService = {
     localStorage.setItem(KEYS.USER, JSON.stringify(user));
   },
   
+  // New: Sync default categories to DB so foreign keys don't fail
+  syncCategories: async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      // Upsert default categories into the database
+      const categoriesToSync = DEFAULT_CATEGORIES.map(cat => ({
+        id: cat.id,
+        name: cat.name,
+        color: cat.color,
+        type: cat.type,
+        user_id: null // System defaults have no user_id
+      }));
+
+      await supabase.from('categories').upsert(categoriesToSync, { onConflict: 'id' });
+    } catch (e) {
+      console.error("Category Sync Error:", e);
+    }
+  },
+
   getTransactions: async (): Promise<Transaction[]> => {
     try {
       const { data, error } = await supabase
@@ -54,7 +74,7 @@ export const storageService = {
         return mapped;
       }
     } catch (e) {
-      console.warn("Using local cache due to database error");
+      console.warn("Using local cache");
     }
     const local = localStorage.getItem(KEYS.TRANSACTIONS);
     return local ? JSON.parse(local) : [];
@@ -63,24 +83,28 @@ export const storageService = {
   saveTransaction: async (transaction: Omit<Transaction, 'id'>) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      if (!session || !session.user) return { data: null, error: "Auth session missing." };
+
+      const validCatId = ensureValidUUID(transaction.categoryId);
+
+      // Verify category exists in DB first to avoid FK error
+      const { data: catCheck } = await supabase.from('categories').select('id').eq('id', validCatId).single();
       
-      if (!session || !session.user) {
-        return { data: null, error: "Authentication session missing." };
+      if (!catCheck) {
+        // If missing (rare), try to sync first
+        await storageService.syncCategories();
       }
 
       const dbPayload = {
         user_id: session.user.id,
         type: transaction.type,
         amount: Number(transaction.amount),
-        category_id: ensureValidUUID(transaction.categoryId), 
+        category_id: validCatId, 
         date: transaction.date,
         note: transaction.note || ''
       };
 
-      const { data, error } = await supabase
-        .from('transactions')
-        .insert(dbPayload)
-        .select();
+      const { data, error } = await supabase.from('transactions').insert(dbPayload).select();
 
       if (error) {
         console.error("Supabase Save Error:", error.message);
@@ -133,10 +157,10 @@ export const storageService = {
   getCategories: async (): Promise<Category[]> => {
     try {
       const { data, error } = await supabase.from('categories').select('*');
-      if (data && !error) return data;
+      if (data && !error && data.length > 0) return data;
     } catch (e) {}
     const local = localStorage.getItem(KEYS.CATEGORIES);
-    return local ? JSON.parse(local) : [];
+    return local ? JSON.parse(local) : DEFAULT_CATEGORIES;
   },
   
   getSettings: async (): Promise<AppSettings> => {
