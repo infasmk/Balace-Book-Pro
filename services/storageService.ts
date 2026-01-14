@@ -37,8 +37,16 @@ export const storageService = {
   
   syncCategories: async () => {
     try {
-      // Fetch existing categories to see what's missing
-      const { data: existing, error: fetchError } = await supabase.from('categories').select('id');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || !session.user) return;
+
+      const userId = session.user.id;
+
+      // Fetch existing categories for this user
+      const { data: existing, error: fetchError } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('user_id', userId);
       
       if (fetchError) {
         console.error("Failed to check categories:", fetchError.message);
@@ -46,12 +54,14 @@ export const storageService = {
       }
 
       const existingIds = new Set((existing || []).map(e => e.id));
+      
+      // Map defaults to include the current user_id to satisfy DB constraint
       const missing = DEFAULT_CATEGORIES.filter(c => !existingIds.has(c.id)).map(cat => ({
         id: cat.id,
         name: cat.name,
         color: cat.color,
         type: cat.type,
-        user_id: null // System defaults
+        user_id: userId
       }));
       
       if (missing.length > 0) {
@@ -59,7 +69,7 @@ export const storageService = {
         if (insertError) {
           console.error("Insert Categories Error:", insertError.message);
         } else {
-          console.log("Categories synced successfully.");
+          console.log("Categories synced for user:", userId);
         }
       }
     } catch (e) {
@@ -96,10 +106,11 @@ export const storageService = {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session || !session.user) return { data: null, error: "Auth session missing." };
 
+      const userId = session.user.id;
       const validCatId = ensureValidUUID(transaction.categoryId);
 
       const dbPayload = {
-        user_id: session.user.id,
+        user_id: userId,
         type: transaction.type,
         amount: Number(transaction.amount),
         category_id: validCatId, 
@@ -110,7 +121,7 @@ export const storageService = {
       const { data, error } = await supabase.from('transactions').insert(dbPayload).select();
 
       if (error) {
-        // Self-healing: If FK violation occurs, attempt to insert the specific category and retry
+        // Self-healing: If FK violation occurs, attempt to insert the specific category with the user_id and retry
         if (error.message.includes('foreign key constraint')) {
           const cat = DEFAULT_CATEGORIES.find(c => c.id === validCatId);
           if (cat) {
@@ -119,7 +130,7 @@ export const storageService = {
               name: cat.name,
               color: cat.color,
               type: cat.type,
-              user_id: null
+              user_id: userId
             });
             // Final retry
             const retry = await supabase.from('transactions').insert(dbPayload).select();
