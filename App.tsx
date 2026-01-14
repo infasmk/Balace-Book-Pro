@@ -47,20 +47,17 @@ const App: React.FC = () => {
       if (user?.isLoggedIn) {
         setLoading(true);
         try {
-          // First, ensure categories exist in DB to prevent FK errors
           await storageService.syncCategories();
-
           const [txs, cats, sett] = await Promise.all([
             storageService.getTransactions(),
             storageService.getCategories(),
             storageService.getSettings()
           ]);
           setTransactions(txs);
-          setCategories(cats.length > 0 ? cats : DEFAULT_CATEGORIES);
+          setCategories(cats);
           setSettings(sett);
         } catch (err) {
-          console.error("Sync failed", err);
-          showToast('Sync error. Using local data.', 'info');
+          showToast('Sync error.', 'info');
         } finally {
           setLoading(false);
         }
@@ -68,36 +65,6 @@ const App: React.FC = () => {
     };
     syncData();
   }, [user]);
-
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-      const lastDismissed = localStorage.getItem('pwa_install_dismissed');
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-      if (!isStandalone && !lastDismissed) {
-        setShowInstallPrompt(true);
-      }
-    };
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-  }, []);
-
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      showToast('Welcome to the native experience!', 'success');
-      setDeferredPrompt(null);
-    }
-    setShowInstallPrompt(false);
-  };
-
-  const handleCloseInstallPrompt = () => {
-    localStorage.setItem('pwa_install_dismissed', Date.now().toString());
-    setShowInstallPrompt(false);
-  };
 
   const handleLogin = (name: string, sessionUser?: any) => {
     const newUser = { name, isLoggedIn: true, ...sessionUser };
@@ -108,47 +75,34 @@ const App: React.FC = () => {
 
   const handleSaveTransaction = async (data: Omit<Transaction, 'id'>) => {
     if (editingTransaction) {
-      setConfirmState({
-        isOpen: true,
-        title: 'Confirm Edit',
-        message: 'Apply changes to this record?',
-        type: 'primary',
-        onConfirm: async () => {
-          const { error } = await storageService.updateTransaction(editingTransaction.id, data);
-          if (!error) {
-            setTransactions(prev => prev.map(t => t.id === editingTransaction.id ? { ...data, id: t.id } : t));
-            showToast('Record Updated');
-          } else {
-            showToast('Update Failed', 'error');
-          }
-          setConfirmState(s => ({ ...s, isOpen: false }));
-        }
-      });
+      const { error } = await storageService.updateTransaction(editingTransaction.id, data);
+      if (!error) {
+        setTransactions(prev => prev.map(t => t.id === editingTransaction.id ? { ...data, id: t.id } : t));
+        showToast('Updated');
+      }
+      setEditingTransaction(undefined);
     } else {
       const { data: newTx, error } = await storageService.saveTransaction(data);
       if (!error && newTx) {
         setTransactions([newTx[0], ...transactions]);
-        showToast('Record Saved');
+        showToast('Saved');
       } else {
-        showToast(error || 'Save Failed', 'error');
+        showToast(error || 'Failed', 'error');
       }
     }
-    setEditingTransaction(undefined);
   };
 
   const handleDeleteTransaction = (id: string) => {
     setConfirmState({
       isOpen: true,
       title: 'Delete Record',
-      message: 'This action is irreversible. Proceed?',
+      message: 'Delete this transaction?',
       type: 'danger',
       onConfirm: async () => {
         const { error } = await storageService.deleteTransaction(id);
         if (!error) {
           setTransactions(prev => prev.filter(t => t.id !== id));
-          showToast('Record Removed', 'info');
-        } else {
-          showToast('Delete Failed', 'error');
+          showToast('Deleted', 'info');
         }
         setConfirmState(s => ({ ...s, isOpen: false }));
       }
@@ -166,18 +120,40 @@ const App: React.FC = () => {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 animate-pulse">
            <div className="w-12 h-12 bg-indigo-600 rounded-2xl mb-4" />
-           <p className="text-slate-500 font-black uppercase text-[10px] tracking-widest">Encrypting Vault...</p>
+           <p className="text-slate-500 font-black uppercase text-[10px] tracking-widest">Loading...</p>
         </div>
       ) : (
         <>
-          {activeTab === 'dashboard' && <Dashboard transactions={transactions} categories={categories} settings={settings} />}
-          {activeTab === 'history' && <TransactionHistory transactions={transactions} categories={categories} onEdit={(t) => { setEditingTransaction(t); setIsModalOpen(true); }} onDelete={handleDeleteTransaction} />}
+          {activeTab === 'dashboard' && (
+            <Dashboard 
+              transactions={transactions} 
+              categories={categories} 
+              settings={settings} 
+              onNavigateToSettings={() => setActiveTab('settings')}
+            />
+          )}
+          {activeTab === 'history' && (
+            <TransactionHistory 
+              transactions={transactions} 
+              categories={categories} 
+              onEdit={(t) => { setEditingTransaction(t); setIsModalOpen(true); }} 
+              onDelete={handleDeleteTransaction} 
+            />
+          )}
           {activeTab === 'reports' && <Reports transactions={transactions} categories={categories} />}
-          {activeTab === 'settings' && <Settings settings={settings} updateSettings={setSettings} categories={categories} setCategories={setCategories} transactions={transactions} onImport={() => {}} onToast={showToast} />}
+          {activeTab === 'settings' && (
+            <Settings 
+              settings={settings} 
+              updateSettings={setSettings} 
+              categories={categories} 
+              setCategories={setCategories} 
+              transactions={transactions} 
+              onImport={() => {}} 
+              onToast={showToast} 
+            />
+          )}
         </>
       )}
-
-      {showInstallPrompt && <InstallPromptModal onInstall={handleInstallClick} onClose={handleCloseInstallPrompt} />}
 
       <TransactionModal 
         isOpen={isModalOpen} 

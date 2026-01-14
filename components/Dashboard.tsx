@@ -11,6 +11,7 @@ interface DashboardProps {
   transactions: Transaction[];
   categories: Category[];
   settings: AppSettings;
+  onNavigateToSettings: () => void;
 }
 
 const formatCurrency = (amount: number) => {
@@ -34,7 +35,7 @@ const StatCard = ({ title, amount, icon: Icon, colorClass, bgColorClass }: any) 
   </div>
 );
 
-const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, settings }) => {
+const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, settings, onNavigateToSettings }) => {
   const [showWelcome, setShowWelcome] = useState(false);
   const [balanceAcknowledged, setBalanceAcknowledged] = useState(() => {
     return localStorage.getItem('bbpro_low_balance_ack') === 'true';
@@ -130,7 +131,6 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
   const warningIssues = budgetHealth.filter(h => h.status === 'warning' || h.status === 'fast');
   const isLowBalance = summary.balance < settings.lowBalanceWarning;
 
-  // Reset acknowledgment if balance goes back up
   useEffect(() => {
     if (!isLowBalance && balanceAcknowledged) {
       setBalanceAcknowledged(false);
@@ -221,7 +221,6 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
         </div>
       )}
 
-      {/* Main Balance Card */}
       <div className={`p-8 rounded-[32px] shadow-2xl relative overflow-hidden transition-all duration-700 border-2 ${
         isLowBalance 
         ? balanceAcknowledged 
@@ -290,13 +289,11 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
         <StatCard title="Today's Spend" amount={summary.todayExpense} icon={TrendingDown} colorClass="text-rose-400" bgColorClass="bg-rose-500/10" />
       </div>
 
-      {/* Smart Alerts Center */}
       {(isLowBalance || criticalIssues.length > 0 || warningIssues.length > 0) && (
         <div className="space-y-2.5">
           <div className="flex items-center gap-2 px-1">
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Risk Monitor</span>
           </div>
-          
           <div className="grid grid-cols-1 gap-2">
             {isLowBalance && (
               <div className={`p-4 border rounded-2xl flex items-center justify-between ${balanceAcknowledged ? 'bg-slate-900 border-slate-800 opacity-60' : 'bg-rose-500/10 border-rose-500/20'}`}>
@@ -314,7 +311,6 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
                 {!balanceAcknowledged && <ArrowRight className="w-4 h-4 text-rose-500/50" />}
               </div>
             )}
-            
             {criticalIssues.map(b => (
               <div key={b.id} className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -326,51 +322,25 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
                     <p className="text-xs font-bold text-slate-300">{b.name} is over {formatCurrency(b.budget)}</p>
                   </div>
                 </div>
-                <span className="text-[10px] font-black text-rose-500">+{formatCurrency(b.spent - b.budget)}</span>
-              </div>
-            ))}
-
-            {warningIssues.map(b => (
-              <div key={b.id} className={`p-4 border rounded-2xl flex items-center gap-3 ${
-                b.status === 'fast' ? 'bg-amber-500/5 border-amber-500/20' : 'bg-slate-900 border-slate-800'
-              }`}>
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                  b.status === 'fast' ? 'bg-amber-500/20' : 'bg-slate-800'
-                }`}>
-                  <Zap className={`w-4 h-4 ${b.status === 'fast' ? 'text-amber-500' : 'text-slate-500'}`} />
-                </div>
-                <div>
-                  <p className={`text-[9px] font-black uppercase tracking-widest ${
-                    b.status === 'fast' ? 'text-amber-500' : 'text-slate-400'
-                  }`}>
-                    {b.status === 'fast' ? 'Velocity Warning' : 'Near Limit'}
-                  </p>
-                  <p className="text-xs font-bold text-slate-300">
-                    {b.status === 'fast' ? `${b.name} spending is too high for this month.` : `${b.name} is at ${Math.round(b.percent)}%.`}
-                  </p>
-                </div>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Budget Pulse Monitor */}
       <div className="bg-slate-900/50 border border-slate-800/60 p-6 rounded-[32px] space-y-6 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 p-6 opacity-[0.03]">
           <Target className="w-32 h-32" />
         </div>
-
         <div className="flex items-center justify-between relative z-10">
           <div>
             <h3 className="font-black text-lg">Budget Pulse</h3>
-            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Live Tracking • {budgetHealth.length} Enforced</p>
+            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Live Tracking</p>
           </div>
           <div className="p-2 bg-slate-800/50 rounded-xl">
              <Target className="w-4 h-4 text-indigo-400" />
           </div>
         </div>
-
         <div className="grid grid-cols-1 gap-6 relative z-10">
           {budgetHealth.length > 0 ? budgetHealth.map((item) => (
             <div key={item.id} className="space-y-2.5">
@@ -386,50 +356,37 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
                 </div>
                 <div className="text-right">
                   <span className={`text-xs font-black ${
-                    item.status === 'critical' ? 'text-rose-500' : 
-                    item.status === 'warning' ? 'text-amber-500' : 
-                    item.status === 'fast' ? 'text-amber-400' : 'text-emerald-500'
+                    item.status === 'critical' ? 'text-rose-500' : 'text-emerald-500'
                   }`}>
                     {Math.round(item.percent)}%
                   </span>
                 </div>
               </div>
-              
               <div className="w-full h-3 bg-slate-800/50 rounded-full overflow-hidden p-[2px] border border-slate-700/30">
                 <div 
                   className={`h-full rounded-full transition-all duration-1000 ease-out shadow-lg ${
-                    item.status === 'critical' ? 'bg-gradient-to-r from-rose-600 to-rose-400' : 
-                    item.status === 'warning' ? 'bg-gradient-to-r from-amber-600 to-amber-400' : 
-                    item.status === 'fast' ? 'bg-gradient-to-r from-amber-500 to-amber-300' : 
-                    'bg-gradient-to-r from-emerald-600 to-emerald-400'
+                    item.status === 'critical' ? 'bg-rose-500' : 'bg-emerald-500'
                   }`}
                   style={{ width: `${Math.min(100, item.percent)}%` }}
                 />
               </div>
-              
-              {item.status === 'fast' && (
-                <div className="flex items-center gap-1.5 mt-1">
-                  <Zap className="w-2.5 h-2.5 text-amber-500" />
-                  <span className="text-[8px] font-black text-amber-500/80 uppercase tracking-widest">
-                    Spending faster than usual
-                  </span>
-                </div>
-              )}
             </div>
           )) : (
             <div className="text-center py-10 border-2 border-dashed border-slate-800 rounded-3xl">
-              <p className="text-slate-600 text-xs font-bold italic">No budgets configured yet.</p>
-              <button className="mt-3 text-[10px] font-black text-indigo-400 uppercase tracking-widest border border-indigo-400/20 px-4 py-2 rounded-xl">
+              <p className="text-slate-600 text-xs font-bold italic">No budgets configured.</p>
+              <button 
+                onClick={onNavigateToSettings}
+                className="mt-3 text-[10px] font-black text-indigo-400 uppercase tracking-widest border border-indigo-400/20 px-4 py-2 rounded-xl"
+              >
                 Set Limits in Settings
               </button>
             </div>
           )}
         </div>
       </div>
-      
-      <div className="text-center pt-8 opacity-20 group cursor-default">
-        <p className="text-[9px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all group-hover:opacity-100">
-          Handcrafted with <Heart className="w-2.5 h-2.5 text-rose-500 fill-rose-500 animate-pulse" /> by Infas
+      <div className="text-center pt-8 opacity-20">
+        <p className="text-[9px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-1.5">
+          Handcrafted with <Heart className="w-2.5 h-2.5 text-rose-500 fill-rose-500" /> by Infas
         </p>
       </div>
     </div>

@@ -1,12 +1,11 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { AppSettings, Category, TransactionType, Transaction } from '../types';
-import { Plus, Trash2, Download, Upload, ShieldCheck, Palette, LogOut, Info, Globe, Users, Heart, Bell } from 'lucide-react';
+import { Plus, Trash2, Download, Upload, ShieldCheck, Palette, LogOut, Info, Globe, Users, Heart, Bell, Save } from 'lucide-react';
 import { CURRENCY_SYMBOL } from '../constants';
 import { storageService } from '../services/storageService';
 import { notificationService } from '../services/notificationService';
 
-// Simple UUID generator for new categories
 const generateUUID = () => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
@@ -31,6 +30,7 @@ const Settings: React.FC<SettingsProps> = ({
   const [newCatColor, setNewCatColor] = useState('#6366f1');
   const [newCatType, setNewCatType] = useState<TransactionType>(TransactionType.EXPENSE);
   const [isNotifEnabled, setIsNotifEnabled] = useState(notificationService.hasPermission());
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleToggleNotifications = async () => {
     if (isNotifEnabled) {
@@ -44,6 +44,19 @@ const Settings: React.FC<SettingsProps> = ({
         onToast("Permission Denied", "error");
       }
     }
+  };
+
+  const saveThreshold = async (val: number) => {
+    setIsSaving(true);
+    const newSettings = { ...settings, lowBalanceWarning: val };
+    updateSettings(newSettings);
+    const { error } = await storageService.updateSettings(newSettings);
+    if (!error) {
+      onToast('Limit Updated', 'success');
+    } else {
+      onToast('Sync Failed', 'error');
+    }
+    setIsSaving(false);
   };
 
   const handleAddCategory = () => {
@@ -62,7 +75,7 @@ const Settings: React.FC<SettingsProps> = ({
   const handleDeleteCategory = (id: string) => {
     const isUsed = transactions.some(t => t.categoryId === id);
     if (isUsed) {
-      onToast("Category is being used in transactions", "error");
+      onToast("Category is being used", "error");
       return;
     }
     setCategories(categories.filter(c => c.id !== id));
@@ -97,7 +110,7 @@ const Settings: React.FC<SettingsProps> = ({
   };
 
   const handleLogout = () => {
-    if (window.confirm('Are you sure you want to logout? All local data remains on this device.')) {
+    if (window.confirm('Are you sure you want to logout?')) {
       localStorage.removeItem('bbpro_user_info');
       localStorage.removeItem('bbpro_welcome_seen'); 
       window.location.reload();
@@ -105,61 +118,47 @@ const Settings: React.FC<SettingsProps> = ({
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-500 pb-20">
       <div>
         <h1 className="text-3xl font-black text-white">Config</h1>
         <p className="text-slate-500 font-bold">Preferences & System Tools</p>
       </div>
 
       <div className="space-y-8">
-        {/* About App Section */}
         <div className="bg-slate-900/50 border border-slate-800 p-8 rounded-[32px] space-y-6">
           <div className="flex items-center gap-3">
-            <Info className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-xl font-bold">About the App</h2>
+            <ShieldCheck className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-xl font-bold">Thresholds</h2>
           </div>
-          <div className="space-y-4 text-sm text-slate-400">
-            <p>
-              <span className="text-white font-bold">BalanceBook Pro</span> is a high-performance financial companion designed to track every rupee with precision.
-            </p>
-            <div className="grid grid-cols-1 gap-3">
-              <div className="flex items-center gap-3 p-3 bg-slate-800/40 rounded-2xl border border-slate-800">
-                <Users className="w-4 h-4 text-indigo-400" />
-                <span className="text-xs font-bold">Created by <span className="text-white">Infas</span> (Web Bits)</span>
-              </div>
-              <div className="flex items-center gap-3 p-3 bg-slate-800/40 rounded-2xl border border-slate-800">
-                <Heart className="w-4 h-4 text-rose-500" />
-                <span className="text-xs font-bold">Powered by <span className="text-white">AWT Team</span></span>
-              </div>
-              <a href="https://webbits.space" target="_blank" className="flex items-center gap-3 p-3 bg-indigo-600/10 rounded-2xl border border-indigo-600/20 hover:bg-indigo-600/20 transition-colors">
-                <Globe className="w-4 h-4 text-indigo-400" />
-                <span className="text-xs font-bold text-indigo-400">Visit webbits.space</span>
-              </a>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between bg-slate-800/30 p-5 rounded-2xl border border-slate-800">
+               <div>
+                  <p className="font-bold text-sm">Low Balance Warning</p>
+                  <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">Global Wallet Alert</p>
+               </div>
+               <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 font-black text-white text-lg">
+                    <span className="text-indigo-400">{CURRENCY_SYMBOL}</span>
+                    <input 
+                      type="number" 
+                      value={settings.lowBalanceWarning} 
+                      onChange={e => updateSettings({ ...settings, lowBalanceWarning: parseInt(e.target.value) || 0 })}
+                      onBlur={e => saveThreshold(parseInt(e.target.value) || 0)}
+                      className="w-24 bg-transparent text-right outline-none border-b border-transparent focus:border-indigo-500/30 transition-all"
+                    />
+                  </div>
+                  <button 
+                    disabled={isSaving}
+                    onClick={() => saveThreshold(settings.lowBalanceWarning)}
+                    className="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg hover:bg-indigo-600/30 transition-all"
+                  >
+                    <Save className={`w-4 h-4 ${isSaving ? 'animate-spin' : ''}`} />
+                  </button>
+               </div>
             </div>
           </div>
         </div>
 
-        {/* Notifications Section */}
-        <div className="bg-slate-900/50 border border-slate-800 p-8 rounded-[32px] space-y-6">
-          <div className="flex items-center gap-3">
-            <Bell className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-xl font-bold">System Alerts</h2>
-          </div>
-          <div 
-            onClick={handleToggleNotifications}
-            className="flex items-center justify-between bg-slate-800/30 p-5 rounded-2xl border border-slate-800 cursor-pointer hover:bg-slate-800/50 transition-colors"
-          >
-             <div>
-                <p className="font-bold text-sm">Push Notifications</p>
-                <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">Budget & Balance Alerts</p>
-             </div>
-             <div className={`w-12 h-6 rounded-full transition-colors relative ${isNotifEnabled ? 'bg-emerald-600' : 'bg-slate-700'}`}>
-                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isNotifEnabled ? 'left-7' : 'left-1'}`} />
-             </div>
-          </div>
-        </div>
-
-        {/* Categories Section */}
         <div className="bg-slate-900/50 border border-slate-800 p-8 rounded-[32px] space-y-6">
           <div className="flex items-center gap-3">
             <Palette className="w-5 h-5 text-indigo-400" />
@@ -169,17 +168,13 @@ const Settings: React.FC<SettingsProps> = ({
             <div className="p-1.5 bg-slate-800 rounded-2xl flex flex-col md:flex-row gap-2">
               <input 
                 type="text" 
-                placeholder="Category Name" 
+                placeholder="Name" 
                 value={newCatName} 
                 onChange={e => setNewCatName(e.target.value)}
                 className="flex-1 px-5 py-3.5 bg-slate-900 border border-slate-700 rounded-xl outline-none font-bold text-sm"
               />
               <div className="flex gap-2">
                 <input type="color" value={newCatColor} onChange={e => setNewCatColor(e.target.value)} className="w-12 h-12 bg-transparent border-none p-1 cursor-pointer" />
-                <select value={newCatType} onChange={e => setNewCatType(e.target.value as TransactionType)} className="bg-slate-900 px-4 rounded-xl border border-slate-700 font-bold text-[10px] uppercase">
-                  <option value={TransactionType.EXPENSE}>Out</option>
-                  <option value={TransactionType.INCOME}>In</option>
-                </select>
                 <button onClick={handleAddCategory} className="bg-indigo-600 px-5 rounded-xl text-white active:scale-95 transition-all"><Plus className="w-5 h-5"/></button>
               </div>
             </div>
@@ -197,36 +192,29 @@ const Settings: React.FC<SettingsProps> = ({
           </div>
         </div>
 
-        {/* Alerts Section */}
         <div className="bg-slate-900/50 border border-slate-800 p-8 rounded-[32px] space-y-6">
           <div className="flex items-center gap-3">
-            <ShieldCheck className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-xl font-bold">Thresholds</h2>
+            <Bell className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-xl font-bold">Notifications</h2>
           </div>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between bg-slate-800/30 p-5 rounded-2xl border border-slate-800">
-               <div>
-                  <p className="font-bold text-sm">Low Balance Warning</p>
-                  <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">Global Wallet Alert</p>
-               </div>
-               <div className="flex items-center gap-2 font-black text-white text-lg">
-                  <span className="text-indigo-400">{CURRENCY_SYMBOL}</span>
-                  <input 
-                    type="number" 
-                    value={settings.lowBalanceWarning} 
-                    onChange={e => updateSettings({ ...settings, lowBalanceWarning: parseInt(e.target.value) || 0 })}
-                    className="w-24 bg-transparent text-right outline-none"
-                  />
-               </div>
-            </div>
-          </div>
+          <button 
+            onClick={handleToggleNotifications}
+            className="w-full flex items-center justify-between bg-slate-800/30 p-5 rounded-2xl border border-slate-800 hover:bg-slate-800/50 transition-colors"
+          >
+             <div className="text-left">
+                <p className="font-bold text-sm">System Alerts</p>
+                <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">{isNotifEnabled ? 'Enabled' : 'Disabled'}</p>
+             </div>
+             <div className={`w-12 h-6 rounded-full transition-colors relative ${isNotifEnabled ? 'bg-emerald-600' : 'bg-slate-700'}`}>
+                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isNotifEnabled ? 'left-7' : 'left-1'}`} />
+             </div>
+          </button>
         </div>
 
-        {/* Data Tools */}
         <div className="grid grid-cols-2 gap-4">
            <button onClick={handleExport} className="p-6 bg-slate-900 border border-slate-800 rounded-[32px] flex flex-col items-center gap-3 active:scale-95 transition-all hover:bg-slate-800/50">
               <Download className="w-6 h-6 text-indigo-400" />
-              <span className="font-black text-[10px] uppercase tracking-widest">Backup JSON</span>
+              <span className="font-black text-[10px] uppercase tracking-widest">Backup</span>
            </button>
            <label className="p-6 bg-slate-900 border border-slate-800 rounded-[32px] flex flex-col items-center gap-3 active:scale-95 transition-all cursor-pointer hover:bg-slate-800/50">
               <Upload className="w-6 h-6 text-emerald-400" />
@@ -235,11 +223,30 @@ const Settings: React.FC<SettingsProps> = ({
            </label>
         </div>
 
+        <div className="bg-slate-900/50 border border-slate-800 p-8 rounded-[32px] space-y-6">
+          <div className="flex items-center gap-3">
+            <Info className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-xl font-bold">About</h2>
+          </div>
+          <div className="space-y-4 text-sm text-slate-400">
+            <div className="grid grid-cols-1 gap-3">
+              <div className="flex items-center gap-3 p-3 bg-slate-800/40 rounded-2xl border border-slate-800">
+                <Users className="w-4 h-4 text-indigo-400" />
+                <span className="text-xs font-bold">Created by <span className="text-white">Infas</span></span>
+              </div>
+              <a href="https://webbits.space" target="_blank" className="flex items-center gap-3 p-3 bg-indigo-600/10 rounded-2xl border border-indigo-600/20 hover:bg-indigo-600/20 transition-colors">
+                <Globe className="w-4 h-4 text-indigo-400" />
+                <span className="text-xs font-bold text-indigo-400">Visit webbits.space</span>
+              </a>
+            </div>
+          </div>
+        </div>
+
         <button 
           onClick={handleLogout}
           className="w-full py-5 bg-rose-600/10 border border-rose-500/20 rounded-[32px] flex items-center justify-center gap-3 text-rose-500 font-black uppercase tracking-widest text-xs hover:bg-rose-600/20 transition-all"
         >
-          <LogOut className="w-4 h-4" /> Sign Out from Vault
+          <LogOut className="w-4 h-4" /> Sign Out
         </button>
       </div>
     </div>
