@@ -21,42 +21,63 @@ export const storageService = {
   // Transactions
   getTransactions: async (): Promise<Transaction[]> => {
     try {
-      const { data, error } = await supabase.from('transactions').select('*').order('date', { ascending: false });
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('date', { ascending: false });
+        
       if (data && !error) {
-        // Map snake_case from DB to camelCase for App
         const mapped = data.map(t => ({
           ...t,
-          categoryId: t.category_id // Map DB column to internal type
+          categoryId: t.category_id 
         }));
         localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(mapped));
         return mapped;
       }
+      if (error) console.error("Supabase Select Error:", error.message);
     } catch (e) {
-      console.error("Supabase fetch error", e);
+      console.error("Fetch exception", e);
     }
     const local = localStorage.getItem(KEYS.TRANSACTIONS);
     return local ? JSON.parse(local) : [];
   },
 
   saveTransaction: async (transaction: Omit<Transaction, 'id'>) => {
-    // Get user id from session
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { data: null, error: 'Not authenticated' };
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      // Construct the database payload strictly matching snake_case columns
+      const dbPayload = {
+        type: transaction.type,
+        amount: Number(transaction.amount),
+        category_id: transaction.categoryId, 
+        date: transaction.date,
+        note: transaction.note || '',
+        user_id: user?.id || null // Handle cases where user might not be in session
+      };
 
-    const dbPayload = {
-      type: transaction.type,
-      amount: transaction.amount,
-      category_id: transaction.categoryId, // Map to DB column
-      date: transaction.date,
-      note: transaction.note,
-      user_id: user.id
-    };
+      const { data, error } = await supabase
+        .from('transactions')
+        .insert([dbPayload])
+        .select();
 
-    const { data, error } = await supabase.from('transactions').insert([dbPayload]).select();
-    
-    // Map response back to camelCase
-    const mappedData = data ? data.map(t => ({ ...t, categoryId: t.category_id })) : null;
-    return { data: mappedData, error };
+      if (error) {
+        console.error("Supabase Insert Error:", error.message, error.details, error.hint);
+        return { data: null, error: error.message };
+      }
+
+      if (data) {
+        const mappedData = data.map(t => ({ 
+          ...t, 
+          categoryId: t.category_id 
+        }));
+        return { data: mappedData, error: null };
+      }
+    } catch (e: any) {
+      console.error("Save exception", e);
+      return { data: null, error: e.message };
+    }
+    return { data: null, error: 'Unknown save error' };
   },
 
   updateTransaction: async (id: string, updates: Partial<Transaction>) => {
@@ -65,12 +86,25 @@ export const storageService = {
       dbUpdates.category_id = updates.categoryId;
       delete dbUpdates.categoryId;
     }
-    const { data, error } = await supabase.from('transactions').update(dbUpdates).eq('id', id);
-    return { data, error };
+    if (updates.amount) {
+      dbUpdates.amount = Number(updates.amount);
+    }
+    
+    const { data, error } = await supabase
+      .from('transactions')
+      .update(dbUpdates)
+      .eq('id', id)
+      .select();
+
+    const mappedData = data ? data.map(t => ({ ...t, categoryId: t.category_id })) : null;
+    return { data: mappedData, error };
   },
 
   deleteTransaction: async (id: string) => {
-    const { error } = await supabase.from('transactions').delete().eq('id', id);
+    const { error } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('id', id);
     return { error };
   },
 
@@ -83,7 +117,7 @@ export const storageService = {
         return data;
       }
     } catch (e) {
-      console.error("Supabase categories error", e);
+      console.error("Categories fetch error", e);
     }
     const local = localStorage.getItem(KEYS.CATEGORIES);
     return local ? JSON.parse(local) : [];
@@ -98,7 +132,7 @@ export const storageService = {
         return data;
       }
     } catch (e) {
-      console.error("Supabase settings error", e);
+      console.error("Settings fetch error", e);
     }
     const local = localStorage.getItem(KEYS.SETTINGS);
     return local ? JSON.parse(local) : {

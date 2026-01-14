@@ -7,12 +7,21 @@ import Reports from './components/Reports';
 import Settings from './components/Settings';
 import TransactionModal from './components/TransactionModal';
 import Auth from './components/Auth';
+import InstallPromptModal from './components/InstallPromptModal';
 import { ConfirmModal, Toast } from './components/CustomModals';
 import { Transaction, Category, AppSettings } from './types';
 import { storageService } from './services/storageService';
 import { DEFAULT_CATEGORIES } from './constants';
-import { Download, X, Smartphone, Zap } from 'lucide-react';
-import { supabase } from './services/supabaseClient';
+
+// Define the BeforeInstallPromptEvent interface
+interface BeforeInstallPromptEvent extends Event {
+  readonly platforms: string[];
+  readonly userChoice: Promise<{
+    outcome: 'accepted' | 'dismissed';
+    platform: string;
+  }>;
+  prompt(): Promise<void>;
+}
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -24,9 +33,9 @@ const App: React.FC = () => {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>(undefined);
   const [loading, setLoading] = useState(false);
 
-  // PWA Logic
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showInstallModal, setShowInstallModal] = useState(false);
+  // PWA Installation State
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
 
   // UI Feedback
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
@@ -61,36 +70,53 @@ const App: React.FC = () => {
     syncData();
   }, [user]);
 
-  // PWA Event Listeners
+  // PWA Install Prompt Listener
   useEffect(() => {
-    const handleBeforeInstallPrompt = (e: any) => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      // Prevent the default browser banner
       e.preventDefault();
-      setDeferredPrompt(e);
-      // Only show if user hasn't ignored it in this session
-      if (!sessionStorage.getItem('install_reminded')) {
-        setShowInstallModal(true);
+      // Store the event for later use
+      const promptEvent = e as BeforeInstallPromptEvent;
+      setDeferredPrompt(promptEvent);
+
+      // Check if user already dismissed it recently
+      const lastDismissed = localStorage.getItem('pwa_install_dismissed');
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+
+      // Only show modal if not installed and not dismissed in this "session"
+      if (!isStandalone && !lastDismissed) {
+        setShowInstallPrompt(true);
       }
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
 
-  const handleInstallApp = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        showToast('BalanceBook Pro Installed!', 'success');
-      }
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+
+    // Show the browser's install prompt
+    await deferredPrompt.prompt();
+
+    // Wait for the user to respond to the prompt
+    const { outcome } = await deferredPrompt.userChoice;
+    
+    if (outcome === 'accepted') {
+      showToast('Welcome to the native experience!', 'success');
       setDeferredPrompt(null);
-      setShowInstallModal(false);
     }
+    
+    setShowInstallPrompt(false);
   };
 
-  const handleRemindLater = () => {
-    sessionStorage.setItem('install_reminded', 'true');
-    setShowInstallModal(false);
+  const handleCloseInstallPrompt = () => {
+    // Save to localStorage so we don't nag the user
+    localStorage.setItem('pwa_install_dismissed', Date.now().toString());
+    setShowInstallPrompt(false);
   };
 
   const handleLogin = (name: string, sessionUser?: any) => {
@@ -113,7 +139,6 @@ const App: React.FC = () => {
             setTransactions(prev => prev.map(t => t.id === editingTransaction.id ? { ...data, id: t.id } : t));
             showToast('Record Updated');
           } else {
-            console.error(error);
             showToast('Update Failed', 'error');
           }
           setConfirmState(s => ({ ...s, isOpen: false }));
@@ -125,8 +150,7 @@ const App: React.FC = () => {
         setTransactions([newTx[0], ...transactions]);
         showToast('Record Saved');
       } else {
-        console.error(error);
-        showToast('Save Failed: Check database schema.', 'error');
+        showToast('Save Failed', 'error');
       }
     }
     setEditingTransaction(undefined);
@@ -173,33 +197,12 @@ const App: React.FC = () => {
         </>
       )}
 
-      {/* PWA Install Modal */}
-      {showInstallModal && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md">
-          <div className="bg-slate-900 border border-slate-800 rounded-[32px] p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95">
-            <div className="w-16 h-16 bg-indigo-600 rounded-[24px] flex items-center justify-center mb-6 shadow-xl shadow-indigo-600/20">
-              <Smartphone className="w-8 h-8 text-white" />
-            </div>
-            <h2 className="text-2xl font-black text-white mb-2">Install App?</h2>
-            <p className="text-slate-400 text-sm leading-relaxed mb-8">
-              Add BalanceBook Pro to your home screen for lightning-fast access and offline usage.
-            </p>
-            <div className="space-y-3">
-              <button 
-                onClick={handleInstallApp}
-                className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
-              >
-                Install App
-              </button>
-              <button 
-                onClick={handleRemindLater}
-                className="w-full py-4 text-slate-500 font-bold hover:text-slate-300 transition-colors"
-              >
-                Remind Me Later
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* PWA Install Prompt */}
+      {showInstallPrompt && (
+        <InstallPromptModal 
+          onInstall={handleInstallClick} 
+          onClose={handleCloseInstallPrompt} 
+        />
       )}
 
       <TransactionModal 
