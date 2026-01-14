@@ -27,6 +27,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   const [categoryId, setCategoryId] = useState<string>(initialData?.categoryId || '');
   const [date, setDate] = useState<string>(initialData?.date ? initialData.date.split('T')[0] : format(new Date(), 'yyyy-MM-dd'));
   const [note, setNote] = useState<string>(initialData?.note || '');
+  const [errorToast, setErrorToast] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialData) {
@@ -42,6 +43,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       setDate(format(new Date(), 'yyyy-MM-dd'));
       setNote('');
     }
+    setErrorToast(null);
   }, [initialData, isOpen]);
 
   const budgetOutlook = useMemo(() => {
@@ -81,7 +83,23 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || !categoryId || !date) return;
+    
+    if (!amount || parseFloat(amount) <= 0) {
+      setErrorToast("Please enter a valid amount");
+      return;
+    }
+
+    if (!categoryId) {
+      setErrorToast("Please choose a category first");
+      setTimeout(() => setErrorToast(null), 3000);
+      return;
+    }
+
+    if (!date) {
+      setErrorToast("Please select a date");
+      return;
+    }
+
     onSave({
       type,
       amount: parseFloat(amount),
@@ -94,8 +112,14 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200">
+      {errorToast && (
+        <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[70] bg-rose-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl animate-in slide-in-from-top-4">
+          {errorToast}
+        </div>
+      )}
+      
       <div className="bg-slate-900 w-full h-[90vh] md:h-auto md:max-w-md rounded-t-[40px] md:rounded-[40px] border-t md:border border-slate-800 flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
-        <div className="flex items-center justify-between p-8 border-b border-slate-800">
+        <div className="flex items-center justify-between p-8 border-b border-slate-800 shrink-0">
           <h2 className="text-2xl font-black text-white">{initialData ? 'Edit' : 'New'} Entry</h2>
           <button onClick={onClose} className="p-3 bg-slate-800 rounded-2xl active:scale-90 transition-transform">
             <X className="w-5 h-5 text-slate-400" />
@@ -106,14 +130,14 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
           <div className="grid grid-cols-2 gap-2 p-1 bg-slate-800 rounded-2xl">
             <button
               type="button"
-              onClick={() => setType(TransactionType.EXPENSE)}
+              onClick={() => { setType(TransactionType.EXPENSE); setCategoryId(''); }}
               className={`py-3 rounded-xl text-xs font-black transition-all ${type === TransactionType.EXPENSE ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' : 'text-slate-500'}`}
             >
               Expense
             </button>
             <button
               type="button"
-              onClick={() => setType(TransactionType.INCOME)}
+              onClick={() => { setType(TransactionType.INCOME); setCategoryId(''); }}
               className={`py-3 rounded-xl text-xs font-black transition-all ${type === TransactionType.INCOME ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-slate-500'}`}
             >
               Income
@@ -141,7 +165,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                 required
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full px-4 py-4 bg-slate-800 border border-slate-700 rounded-2xl outline-none font-bold text-sm text-white focus:ring-2 focus:ring-indigo-500 transition-all appearance-none"
+                className={`w-full px-4 py-4 bg-slate-800 border ${!categoryId && errorToast ? 'border-rose-500/50' : 'border-slate-700'} rounded-2xl outline-none font-bold text-sm text-white focus:ring-2 focus:ring-indigo-500 transition-all appearance-none`}
               >
                 <option value="">Choose</option>
                 {filteredCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
@@ -197,6 +221,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
 
         <div className="p-8 absolute bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800">
           <button
+            type="button"
             onClick={handleSubmit}
             className={`w-full py-4 rounded-2xl font-black text-lg transition-all shadow-xl active:scale-95 ${
               type === TransactionType.INCOME 

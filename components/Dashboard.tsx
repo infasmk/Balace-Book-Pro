@@ -24,7 +24,7 @@ const formatCurrency = (amount: number) => {
 };
 
 const StatCard = ({ title, amount, icon: Icon, colorClass, bgColorClass }: any) => (
-  <div className="bg-slate-900/50 p-4 md:p-5 rounded-[24px] border border-slate-800/50 flex items-center justify-between group hover:border-slate-700 transition-all">
+  <div className="bg-slate-900/50 p-4 md:p-5 rounded-[24px] border border-slate-800/50 flex items-center justify-between group hover:border-slate-700 transition-all shrink-0">
     <div className="space-y-1 overflow-hidden">
       <p className="text-[8px] md:text-[9px] font-black text-slate-500 uppercase tracking-widest truncate">{title}</p>
       <h3 className="text-lg md:text-xl font-black text-white truncate">{formatCurrency(amount)}</h3>
@@ -128,7 +128,6 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
   }, [transactions, categories]);
 
   const criticalIssues = budgetHealth.filter(h => h.status === 'critical');
-  const warningIssues = budgetHealth.filter(h => h.status === 'warning' || h.status === 'fast');
   const isLowBalance = summary.balance < settings.lowBalanceWarning;
 
   useEffect(() => {
@@ -161,7 +160,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-500 max-w-full overflow-x-hidden pb-12">
+    <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-6 duration-500 max-w-full overflow-x-hidden pb-32 md:pb-12 min-h-full">
       <style>{`
         @keyframes ring-pulse {
           0% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.4); }
@@ -180,8 +179,8 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
         }
       `}</style>
 
-      {/* Header section with limited height on mobile */}
-      <div className="px-1 flex justify-between items-end gap-2">
+      {/* Header section */}
+      <div className="px-1 flex justify-between items-end gap-2 shrink-0">
         <div className="overflow-hidden">
           <h1 className="text-xl md:text-2xl font-black text-white tracking-tight truncate">{greeting}, {user?.name || 'Guest'}!</h1>
           <p className="text-slate-500 text-[10px] md:text-sm font-bold truncate">
@@ -222,8 +221,8 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
         </div>
       )}
 
-      {/* Main Balance Card - Responsive sizing */}
-      <div className={`p-6 md:p-8 rounded-[32px] shadow-2xl relative overflow-hidden transition-all duration-700 border-2 ${
+      {/* Main Balance Card */}
+      <div className={`p-6 md:p-8 rounded-[32px] shadow-2xl relative overflow-hidden transition-all duration-700 border-2 shrink-0 ${
         isLowBalance 
         ? balanceAcknowledged 
           ? 'bg-slate-900 border-amber-500/30 shadow-amber-900/10'
@@ -241,7 +240,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
             </p>
             {isLowBalance && (
               <span className={`${balanceAcknowledged ? 'bg-amber-500/20 text-amber-500' : 'bg-rose-500 text-white animate-pulse'} text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter shrink-0 ml-2`}>
-                {balanceAcknowledged ? 'Verified' : 'Action'}
+                {balanceAcknowledged ? 'Verified' : 'Action Required'}
               </span>
             )}
           </div>
@@ -256,7 +255,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
               className="w-full md:w-fit flex items-center justify-center gap-2 px-5 py-3 bg-rose-500 hover:bg-rose-400 text-white rounded-2xl text-[11px] md:text-xs font-black transition-all active:scale-95 shadow-xl shadow-rose-900/40"
             >
               <ShieldCheck className="w-4 h-4" />
-              Confirm & Verify Balance
+              Confirm Security Check
             </button>
           )}
 
@@ -286,18 +285,18 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 shrink-0">
         <StatCard title="Today In" amount={summary.todayIncome} icon={TrendingUp} colorClass="text-emerald-400" bgColorClass="bg-emerald-500/10" />
         <StatCard title="Today Out" amount={summary.todayExpense} icon={TrendingDown} colorClass="text-rose-400" bgColorClass="bg-rose-500/10" />
       </div>
 
-      {/* Smart Alerts Center - Optimized for mobile space */}
-      {(isLowBalance || criticalIssues.length > 0 || warningIssues.length > 0) && (
-        <div className="space-y-2">
+      {/* Smart Alerts Center */}
+      {(isLowBalance || criticalIssues.length > 0) && (
+        <div className="space-y-2 shrink-0">
           <div className="flex items-center gap-2 px-1">
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Risk Monitor</span>
           </div>
-          <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin">
+          <div className="grid grid-cols-1 gap-2">
             {isLowBalance && (
               <div className={`p-3 md:p-4 border rounded-2xl flex items-center justify-between transition-all ${balanceAcknowledged ? 'bg-slate-900/40 border-slate-800 opacity-60' : 'bg-rose-500/10 border-rose-500/20 shadow-lg shadow-rose-900/5'}`}>
                 <div className="flex items-center gap-3 overflow-hidden">
@@ -332,11 +331,11 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
       )}
 
       {/* Budget Pulse Monitor - Guaranteed Visibility */}
-      <div className="bg-slate-900/50 border border-slate-800/60 p-5 md:p-6 rounded-[32px] space-y-5 md:space-y-6 shadow-xl relative overflow-hidden min-h-[120px]">
+      <div className="bg-slate-900/50 border border-slate-800/60 p-5 md:p-6 rounded-[32px] space-y-5 md:space-y-6 shadow-xl relative overflow-hidden flex-1 min-h-[300px]">
         <div className="absolute top-0 right-0 p-6 opacity-[0.03] pointer-events-none">
           <Target className="w-24 h-24 md:w-32 md:h-32" />
         </div>
-        <div className="flex items-center justify-between relative z-10">
+        <div className="flex items-center justify-between relative z-10 shrink-0">
           <div className="overflow-hidden">
             <h3 className="font-black text-base md:text-lg">Budget Pulse</h3>
             <p className="text-[8px] md:text-[9px] font-black text-slate-500 uppercase tracking-widest">Live Performance Tracking</p>
@@ -345,9 +344,9 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
              <Target className="w-4 h-4 text-indigo-400" />
           </div>
         </div>
-        <div className="grid grid-cols-1 gap-5 md:gap-6 relative z-10">
+        <div className="flex flex-col gap-6 relative z-10 overflow-y-auto pr-1 pb-4">
           {budgetHealth.length > 0 ? budgetHealth.map((item) => (
-            <div key={item.id} className="space-y-2">
+            <div key={item.id} className="space-y-2 shrink-0">
               <div className="flex justify-between items-end gap-2">
                 <div className="flex items-center gap-2.5 overflow-hidden">
                   <div className="w-1.5 h-6 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
@@ -389,7 +388,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
         </div>
       </div>
 
-      <div className="text-center pt-4 opacity-30">
+      <div className="text-center pt-4 opacity-30 shrink-0">
         <p className="text-[8px] md:text-[9px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-1.5">
           Handcrafted with <Heart className="w-2.5 h-2.5 text-rose-500 fill-rose-500" /> by Infas
         </p>
