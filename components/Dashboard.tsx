@@ -3,7 +3,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Transaction, Category, TransactionType, AppSettings } from '../types';
 import { CURRENCY_SYMBOL } from '../constants';
 import { isToday, startOfMonth, endOfMonth, isWithinInterval, parseISO, differenceInDays, getDaysInMonth } from 'date-fns';
-import { TrendingUp, TrendingDown, Wallet, AlertCircle, Zap, Target, Heart, ExternalLink, X, AlertOctagon, Sparkles, BellRing, ArrowRight } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, AlertCircle, Zap, Target, Heart, ExternalLink, X, AlertOctagon, Sparkles, BellRing, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { storageService } from '../services/storageService';
 import { notificationService } from '../services/notificationService';
 
@@ -36,6 +36,9 @@ const StatCard = ({ title, amount, icon: Icon, colorClass, bgColorClass }: any) 
 
 const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, settings }) => {
   const [showWelcome, setShowWelcome] = useState(false);
+  const [balanceAcknowledged, setBalanceAcknowledged] = useState(() => {
+    return localStorage.getItem('bbpro_low_balance_ack') === 'true';
+  });
   const user = storageService.getUser();
 
   useEffect(() => {
@@ -105,7 +108,6 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
         const budget = c.budget as number;
         const percent = (spent / budget) * 100;
         
-        // Predictive Logic: Are you spending too fast?
         const expectedPercent = (daysPassed / totalDays) * 100;
         const isSpendingTooFast = percent > expectedPercent + 15 && percent < 100;
 
@@ -128,11 +130,19 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
   const warningIssues = budgetHealth.filter(h => h.status === 'warning' || h.status === 'fast');
   const isLowBalance = summary.balance < settings.lowBalanceWarning;
 
+  // Reset acknowledgment if balance goes back up
   useEffect(() => {
-    if (isLowBalance) {
+    if (!isLowBalance && balanceAcknowledged) {
+      setBalanceAcknowledged(false);
+      localStorage.removeItem('bbpro_low_balance_ack');
+    }
+  }, [isLowBalance, balanceAcknowledged]);
+
+  useEffect(() => {
+    if (isLowBalance && !balanceAcknowledged) {
       notificationService.send(
         "Low Balance Warning", 
-        `Your balance ${formatCurrency(summary.balance)} is below your threshold.`
+        `Your balance ${formatCurrency(summary.balance)} is below your threshold. Please verify.`
       );
     }
     
@@ -143,7 +153,12 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
         `Limit reached for ${highestBreach.name}.`
       );
     }
-  }, [summary.balance, criticalIssues.length, isLowBalance, settings.lowBalanceWarning]);
+  }, [summary.balance, criticalIssues.length, isLowBalance, balanceAcknowledged, settings.lowBalanceWarning]);
+
+  const handleAcknowledge = () => {
+    setBalanceAcknowledged(true);
+    localStorage.setItem('bbpro_low_balance_ack', 'true');
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-500">
@@ -156,14 +171,23 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
         .animate-ring-pulse {
           animation: ring-pulse 2s infinite;
         }
+        @keyframes subtle-glow {
+          0%, 100% { opacity: 0.8; }
+          50% { opacity: 1; filter: brightness(1.2); }
+        }
+        .low-balance-glow {
+          animation: subtle-glow 3s infinite ease-in-out;
+        }
       `}</style>
 
       <div className="px-1 flex justify-between items-end">
         <div>
           <h1 className="text-2xl font-black text-white tracking-tight">{greeting}, {user?.name || 'Guest'}!</h1>
-          <p className="text-slate-500 text-sm font-bold">Financial Vault: {isLowBalance ? 'Attention Required' : 'Status Secure'}</p>
+          <p className="text-slate-500 text-sm font-bold">
+            Financial Vault: {isLowBalance && !balanceAcknowledged ? 'Critical Verification Needed' : 'Status Secure'}
+          </p>
         </div>
-        {(criticalIssues.length > 0 || isLowBalance) && (
+        {(criticalIssues.length > 0 || (isLowBalance && !balanceAcknowledged)) && (
           <div className="relative">
             <div className="w-10 h-10 rounded-2xl bg-rose-500/20 flex items-center justify-center border border-rose-500/30 animate-ring-pulse">
               <BellRing className="w-5 h-5 text-rose-500" />
@@ -200,7 +224,9 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
       {/* Main Balance Card */}
       <div className={`p-8 rounded-[32px] shadow-2xl relative overflow-hidden transition-all duration-700 border-2 ${
         isLowBalance 
-        ? 'bg-slate-900 border-rose-500/50 shadow-rose-900/20' 
+        ? balanceAcknowledged 
+          ? 'bg-slate-900 border-amber-500/30 shadow-amber-900/10'
+          : 'bg-slate-900 border-rose-500 shadow-rose-900/20' 
         : 'bg-indigo-600 border-indigo-400/20 shadow-indigo-900/20'
       }`}>
         <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -209,38 +235,53 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
         
         <div className="relative z-10 space-y-4">
           <div className="flex items-center justify-between">
-            <p className={`text-xs font-black uppercase tracking-widest ${isLowBalance ? 'text-rose-400' : 'text-white/70'}`}>
+            <p className={`text-xs font-black uppercase tracking-widest ${isLowBalance ? (balanceAcknowledged ? 'text-amber-400' : 'text-rose-400') : 'text-white/70'}`}>
               Available Balance
             </p>
             {isLowBalance && (
-              <span className="bg-rose-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter animate-pulse">
-                Low Balance
+              <span className={`${balanceAcknowledged ? 'bg-amber-500/20 text-amber-500' : 'bg-rose-500 text-white animate-pulse'} text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter`}>
+                {balanceAcknowledged ? 'Verified Low' : 'Action Required'}
               </span>
             )}
           </div>
           
-          <h2 className={`text-5xl font-black tracking-tighter ${isLowBalance ? 'text-rose-500' : 'text-white'}`}>
+          <h2 className={`text-5xl font-black tracking-tighter ${isLowBalance ? (balanceAcknowledged ? 'text-amber-500' : 'text-rose-500 low-balance-glow') : 'text-white'}`}>
             {formatCurrency(summary.balance)}
           </h2>
           
-          <div className="flex items-center gap-3 pt-2">
-             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl backdrop-blur-md border ${
-               isLowBalance ? 'bg-rose-500/10 border-rose-500/20' : 'bg-white/10 border-white/10'
-             }`}>
-                <Sparkles className={`w-3 h-3 ${isLowBalance ? 'text-rose-400' : 'text-white/70'}`} />
-                <span className={`text-[10px] font-bold ${isLowBalance ? 'text-rose-300' : 'text-white'}`}>
-                  Monthly Out: {formatCurrency(summary.monthExpense)}
-                </span>
-             </div>
-             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl backdrop-blur-md border ${
-               isLowBalance ? 'bg-rose-500/10 border-rose-500/20' : 'bg-white/10 border-white/10'
-             }`}>
-                <TrendingUp className={`w-3 h-3 ${isLowBalance ? 'text-rose-400' : 'text-white/70'}`} />
-                <span className={`text-[10px] font-bold ${isLowBalance ? 'text-rose-300' : 'text-white'}`}>
-                  Savings: {formatCurrency(summary.monthIncome - summary.monthExpense)}
-                </span>
-             </div>
-          </div>
+          {isLowBalance && !balanceAcknowledged && (
+            <button 
+              onClick={handleAcknowledge}
+              className="flex items-center gap-2 px-5 py-3 bg-rose-500 hover:bg-rose-400 text-white rounded-2xl text-xs font-black transition-all active:scale-95 shadow-xl shadow-rose-900/40"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              Confirm & Verify Balance
+            </button>
+          )}
+
+          {isLowBalance && balanceAcknowledged && (
+            <div className="flex items-center gap-2 text-amber-500/60 text-[10px] font-black uppercase tracking-widest bg-amber-500/5 py-1 px-3 rounded-lg w-fit">
+              <CheckCircle2 className="w-3 h-3" />
+              Security Acknowledged
+            </div>
+          )}
+          
+          {!isLowBalance && (
+            <div className="flex items-center gap-3 pt-2">
+               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl backdrop-blur-md border bg-white/10 border-white/10">
+                  <Sparkles className="w-3 h-3 text-white/70" />
+                  <span className="text-[10px] font-bold text-white">
+                    Monthly Out: {formatCurrency(summary.monthExpense)}
+                  </span>
+               </div>
+               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl backdrop-blur-md border bg-white/10 border-white/10">
+                  <TrendingUp className="w-3 h-3 text-white/70" />
+                  <span className="text-[10px] font-bold text-white">
+                    Savings: {formatCurrency(summary.monthIncome - summary.monthExpense)}
+                  </span>
+               </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -258,17 +299,19 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
           
           <div className="grid grid-cols-1 gap-2">
             {isLowBalance && (
-              <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-between">
+              <div className={`p-4 border rounded-2xl flex items-center justify-between ${balanceAcknowledged ? 'bg-slate-900 border-slate-800 opacity-60' : 'bg-rose-500/10 border-rose-500/20'}`}>
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-rose-500/20 flex items-center justify-center shrink-0">
-                    <AlertOctagon className="w-4 h-4 text-rose-500" />
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${balanceAcknowledged ? 'bg-slate-800' : 'bg-rose-500/20'}`}>
+                    <AlertOctagon className={`w-4 h-4 ${balanceAcknowledged ? 'text-slate-500' : 'text-rose-500'}`} />
                   </div>
                   <div>
-                    <p className="text-[9px] font-black text-rose-500 uppercase tracking-widest">Global Limit Breached</p>
-                    <p className="text-xs font-bold text-slate-300">Balance below {formatCurrency(settings.lowBalanceWarning)}</p>
+                    <p className={`text-[9px] font-black uppercase tracking-widest ${balanceAcknowledged ? 'text-slate-500' : 'text-rose-500'}`}>
+                      {balanceAcknowledged ? 'Acknowledged' : 'Verification Required'}
+                    </p>
+                    <p className="text-xs font-bold text-slate-300">Below threshold: {formatCurrency(settings.lowBalanceWarning)}</p>
                   </div>
                 </div>
-                <ArrowRight className="w-4 h-4 text-rose-500/50" />
+                {!balanceAcknowledged && <ArrowRight className="w-4 h-4 text-rose-500/50" />}
               </div>
             )}
             
