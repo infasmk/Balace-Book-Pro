@@ -2,8 +2,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Transaction, Category, TransactionType, AppSettings } from '../types';
 import { CURRENCY_SYMBOL } from '../constants';
-import { isToday, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
-import { TrendingUp, TrendingDown, Wallet, AlertCircle, Zap, Target, Heart, ExternalLink, X, AlertOctagon, Sparkles, BellRing } from 'lucide-react';
+import { isToday, startOfMonth, endOfMonth, isWithinInterval, parseISO, differenceInDays, getDaysInMonth } from 'date-fns';
+import { TrendingUp, TrendingDown, Wallet, AlertCircle, Zap, Target, Heart, ExternalLink, X, AlertOctagon, Sparkles, BellRing, ArrowRight } from 'lucide-react';
 import { storageService } from '../services/storageService';
 import { notificationService } from '../services/notificationService';
 
@@ -23,13 +23,13 @@ const formatCurrency = (amount: number) => {
 };
 
 const StatCard = ({ title, amount, icon: Icon, colorClass, bgColorClass }: any) => (
-  <div className="bg-slate-900/50 p-6 rounded-[24px] border border-slate-800 flex items-center justify-between group">
+  <div className="bg-slate-900/50 p-5 rounded-[24px] border border-slate-800/50 flex items-center justify-between group hover:border-slate-700 transition-all">
     <div className="space-y-1">
-      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{title}</p>
-      <h3 className="text-2xl font-black text-white">{formatCurrency(amount)}</h3>
+      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{title}</p>
+      <h3 className="text-xl font-black text-white">{formatCurrency(amount)}</h3>
     </div>
-    <div className={`p-3 rounded-2xl ${bgColorClass}`}>
-      <Icon className={`w-5 h-5 ${colorClass}`} />
+    <div className={`p-2.5 rounded-xl ${bgColorClass}`}>
+      <Icon className={`w-4 h-4 ${colorClass}`} />
     </div>
   </div>
 );
@@ -88,6 +88,8 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
     const today = new Date();
     const monthStart = startOfMonth(today);
     const monthEnd = endOfMonth(today);
+    const daysPassed = differenceInDays(today, monthStart) + 1;
+    const totalDays = getDaysInMonth(today);
     
     const categorySpending: Record<string, number> = {};
     transactions
@@ -100,30 +102,37 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
       .filter(c => c.budget && c.budget > 0)
       .map(c => {
         const spent = categorySpending[c.id] || 0;
-        const percent = (spent / (c.budget || 1)) * 100;
+        const budget = c.budget as number;
+        const percent = (spent / budget) * 100;
+        
+        // Predictive Logic: Are you spending too fast?
+        const expectedPercent = (daysPassed / totalDays) * 100;
+        const isSpendingTooFast = percent > expectedPercent + 15 && percent < 100;
+
         return {
           id: c.id,
           name: c.name,
           spent,
-          budget: c.budget as number,
+          remaining: Math.max(0, budget - spent),
+          budget,
           percent,
           color: c.color,
-          status: percent >= 100 ? 'critical' : percent >= 85 ? 'warning' : 'healthy'
+          isSpendingTooFast,
+          status: percent >= 100 ? 'critical' : percent >= 85 ? 'warning' : isSpendingTooFast ? 'fast' : 'healthy'
         };
       })
       .sort((a, b) => b.percent - a.percent); 
   }, [transactions, categories]);
 
   const criticalIssues = budgetHealth.filter(h => h.status === 'critical');
-  const warningIssues = budgetHealth.filter(h => h.status === 'warning');
+  const warningIssues = budgetHealth.filter(h => h.status === 'warning' || h.status === 'fast');
   const isLowBalance = summary.balance < settings.lowBalanceWarning;
 
-  // Trigger Native Push Notifications
   useEffect(() => {
     if (isLowBalance) {
       notificationService.send(
         "Low Balance Warning", 
-        `Your balance ${formatCurrency(summary.balance)} is below your ${formatCurrency(settings.lowBalanceWarning)} limit.`
+        `Your balance ${formatCurrency(summary.balance)} is below your threshold.`
       );
     }
     
@@ -131,24 +140,34 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
       const highestBreach = criticalIssues[0];
       notificationService.send(
         "Budget Limit Exceeded", 
-        `You have spent ${formatCurrency(highestBreach.spent)} on ${highestBreach.name}, exceeding your limit.`
+        `Limit reached for ${highestBreach.name}.`
       );
     }
-  }, [summary.balance, criticalIssues, isLowBalance, settings.lowBalanceWarning]);
+  }, [summary.balance, criticalIssues.length, isLowBalance, settings.lowBalanceWarning]);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-500">
+      <style>{`
+        @keyframes ring-pulse {
+          0% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.4); }
+          70% { box-shadow: 0 0 0 10px rgba(244, 63, 94, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
+        }
+        .animate-ring-pulse {
+          animation: ring-pulse 2s infinite;
+        }
+      `}</style>
+
       <div className="px-1 flex justify-between items-end">
         <div>
           <h1 className="text-2xl font-black text-white tracking-tight">{greeting}, {user?.name || 'Guest'}!</h1>
-          <p className="text-slate-500 text-sm font-bold">Smart tracking for smart savings.</p>
+          <p className="text-slate-500 text-sm font-bold">Financial Vault: {isLowBalance ? 'Attention Required' : 'Status Secure'}</p>
         </div>
         {(criticalIssues.length > 0 || isLowBalance) && (
           <div className="relative">
-            <div className="w-10 h-10 rounded-2xl bg-rose-500/20 flex items-center justify-center border border-rose-500/30 animate-pulse">
+            <div className="w-10 h-10 rounded-2xl bg-rose-500/20 flex items-center justify-center border border-rose-500/30 animate-ring-pulse">
               <BellRing className="w-5 h-5 text-rose-500" />
             </div>
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-rose-600 rounded-full border-2 border-slate-950" />
           </div>
         )}
       </div>
@@ -165,23 +184,13 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
             <h2 className="text-2xl font-black text-white mb-2">Welcome to BalanceBook Pro</h2>
             <p className="text-slate-400 text-sm leading-relaxed mb-6">
               Track your daily spends, manage budgets, and take control of your savings effortlessly. 
-              <br/><br/>
-              Created by <span className="font-bold text-indigo-400">Infas from Web Bits</span>.
-              Powered by <span className="font-bold text-white uppercase tracking-widest text-[10px]">AWT Team</span>.
             </p>
             <div className="space-y-3">
-              <a 
-                href="https://webbits.space" 
-                target="_blank" 
-                className="flex items-center justify-between w-full py-4 px-6 bg-indigo-600 rounded-2xl font-black text-white hover:bg-indigo-700 transition-colors"
-              >
-                Follow Developer <ExternalLink className="w-4 h-4" />
-              </a>
               <button 
                 onClick={closeWelcome}
-                className="w-full py-4 px-6 bg-slate-800 rounded-2xl font-black text-slate-300"
+                className="w-full py-4 px-6 bg-indigo-600 rounded-2xl font-black text-white hover:bg-indigo-700 transition-colors"
               >
-                Get Started
+                Launch Dashboard
               </button>
             </div>
           </div>
@@ -189,127 +198,195 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
       )}
 
       {/* Main Balance Card */}
-      <div className={`p-8 rounded-[32px] shadow-2xl relative overflow-hidden transition-colors duration-500 ${isLowBalance ? 'bg-rose-600 shadow-rose-600/20' : 'bg-indigo-600 shadow-indigo-600/20'}`}>
-        <div className="absolute top-0 right-0 p-4 opacity-20">
+      <div className={`p-8 rounded-[32px] shadow-2xl relative overflow-hidden transition-all duration-700 border-2 ${
+        isLowBalance 
+        ? 'bg-slate-900 border-rose-500/50 shadow-rose-900/20' 
+        : 'bg-indigo-600 border-indigo-400/20 shadow-indigo-900/20'
+      }`}>
+        <div className="absolute top-0 right-0 p-4 opacity-10">
           {isLowBalance ? <AlertOctagon className="w-24 h-24 rotate-12" /> : <Wallet className="w-24 h-24 rotate-12" />}
         </div>
-        <div className="relative z-10 space-y-2">
-          <p className="text-white/70 text-xs font-black uppercase tracking-widest">Available Balance</p>
-          <h2 className="text-4xl font-black text-white">{formatCurrency(summary.balance)}</h2>
-          <div className="flex items-center gap-2 pt-4">
-             <div className="flex items-center gap-1 bg-white/20 px-3 py-1 rounded-full backdrop-blur-md">
-                <Sparkles className="w-3 h-3 text-white/70" />
-                <span className="text-[10px] font-bold text-white">Monthly Expense: {formatCurrency(summary.monthExpense)}</span>
+        
+        <div className="relative z-10 space-y-4">
+          <div className="flex items-center justify-between">
+            <p className={`text-xs font-black uppercase tracking-widest ${isLowBalance ? 'text-rose-400' : 'text-white/70'}`}>
+              Available Balance
+            </p>
+            {isLowBalance && (
+              <span className="bg-rose-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter animate-pulse">
+                Low Balance
+              </span>
+            )}
+          </div>
+          
+          <h2 className={`text-5xl font-black tracking-tighter ${isLowBalance ? 'text-rose-500' : 'text-white'}`}>
+            {formatCurrency(summary.balance)}
+          </h2>
+          
+          <div className="flex items-center gap-3 pt-2">
+             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl backdrop-blur-md border ${
+               isLowBalance ? 'bg-rose-500/10 border-rose-500/20' : 'bg-white/10 border-white/10'
+             }`}>
+                <Sparkles className={`w-3 h-3 ${isLowBalance ? 'text-rose-400' : 'text-white/70'}`} />
+                <span className={`text-[10px] font-bold ${isLowBalance ? 'text-rose-300' : 'text-white'}`}>
+                  Monthly Out: {formatCurrency(summary.monthExpense)}
+                </span>
+             </div>
+             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl backdrop-blur-md border ${
+               isLowBalance ? 'bg-rose-500/10 border-rose-500/20' : 'bg-white/10 border-white/10'
+             }`}>
+                <TrendingUp className={`w-3 h-3 ${isLowBalance ? 'text-rose-400' : 'text-white/70'}`} />
+                <span className={`text-[10px] font-bold ${isLowBalance ? 'text-rose-300' : 'text-white'}`}>
+                  Savings: {formatCurrency(summary.monthIncome - summary.monthExpense)}
+                </span>
              </div>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <StatCard title="Daily In" amount={summary.todayIncome} icon={TrendingUp} colorClass="text-emerald-400" bgColorClass="bg-emerald-500/10" />
-        <StatCard title="Daily Out" amount={summary.todayExpense} icon={TrendingDown} colorClass="text-rose-400" bgColorClass="bg-rose-500/10" />
+        <StatCard title="Today's Earnings" amount={summary.todayIncome} icon={TrendingUp} colorClass="text-emerald-400" bgColorClass="bg-emerald-500/10" />
+        <StatCard title="Today's Spend" amount={summary.todayExpense} icon={TrendingDown} colorClass="text-rose-400" bgColorClass="bg-rose-500/10" />
       </div>
 
       {/* Smart Alerts Center */}
       {(isLowBalance || criticalIssues.length > 0 || warningIssues.length > 0) && (
-        <div className="space-y-3 animate-in slide-in-from-right duration-500">
-          <div className="flex items-center gap-2 px-1 mb-1">
-            <AlertCircle className="w-3 h-3 text-slate-500" />
-            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Active Alerts</span>
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Risk Monitor</span>
           </div>
           
-          {isLowBalance && (
-            <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-rose-500/20 flex items-center justify-center shrink-0">
-                <AlertOctagon className="w-4 h-4 text-rose-500" />
+          <div className="grid grid-cols-1 gap-2">
+            {isLowBalance && (
+              <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-rose-500/20 flex items-center justify-center shrink-0">
+                    <AlertOctagon className="w-4 h-4 text-rose-500" />
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black text-rose-500 uppercase tracking-widest">Global Limit Breached</p>
+                    <p className="text-xs font-bold text-slate-300">Balance below {formatCurrency(settings.lowBalanceWarning)}</p>
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-rose-500/50" />
               </div>
-              <div>
-                <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-0.5">Critical Balance</p>
-                <p className="text-xs font-bold text-slate-300">Wallet balance is below your {formatCurrency(settings.lowBalanceWarning)} threshold.</p>
+            )}
+            
+            {criticalIssues.map(b => (
+              <div key={b.id} className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-rose-500/20 flex items-center justify-center shrink-0">
+                    <AlertCircle className="w-4 h-4 text-rose-500" />
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black text-rose-500 uppercase tracking-widest">Budget Exhausted</p>
+                    <p className="text-xs font-bold text-slate-300">{b.name} is over {formatCurrency(b.budget)}</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-black text-rose-500">+{formatCurrency(b.spent - b.budget)}</span>
               </div>
-            </div>
-          )}
-          
-          {criticalIssues.map(b => (
-            <div key={b.id} className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-rose-500/20 flex items-center justify-center shrink-0">
-                <AlertCircle className="w-4 h-4 text-rose-500" />
-              </div>
-              <div>
-                <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-0.5">Limit Exceeded</p>
-                <p className="text-xs font-bold text-slate-300">You've spent {formatCurrency(b.spent)} on {b.name}, which is {Math.round(b.percent)}% of budget.</p>
-              </div>
-            </div>
-          ))}
+            ))}
 
-          {warningIssues.map(b => (
-            <div key={b.id} className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
-                <Zap className="w-4 h-4 text-amber-500" />
+            {warningIssues.map(b => (
+              <div key={b.id} className={`p-4 border rounded-2xl flex items-center gap-3 ${
+                b.status === 'fast' ? 'bg-amber-500/5 border-amber-500/20' : 'bg-slate-900 border-slate-800'
+              }`}>
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                  b.status === 'fast' ? 'bg-amber-500/20' : 'bg-slate-800'
+                }`}>
+                  <Zap className={`w-4 h-4 ${b.status === 'fast' ? 'text-amber-500' : 'text-slate-500'}`} />
+                </div>
+                <div>
+                  <p className={`text-[9px] font-black uppercase tracking-widest ${
+                    b.status === 'fast' ? 'text-amber-500' : 'text-slate-400'
+                  }`}>
+                    {b.status === 'fast' ? 'Velocity Warning' : 'Near Limit'}
+                  </p>
+                  <p className="text-xs font-bold text-slate-300">
+                    {b.status === 'fast' ? `${b.name} spending is too high for this month.` : `${b.name} is at ${Math.round(b.percent)}%.`}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-0.5">Near Budget</p>
-                <p className="text-xs font-bold text-slate-300">{b.name} spending is at {Math.round(b.percent)}%. Watch your expenses.</p>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 
       {/* Budget Pulse Monitor */}
-      <div className="bg-slate-900 border border-slate-800 p-6 rounded-[32px] space-y-6 shadow-xl shadow-black/20">
-        <div className="flex items-center justify-between">
-          <h3 className="font-black text-lg">Budget Pulse</h3>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black text-slate-500 uppercase">{budgetHealth.length} Tracked</span>
-            <Target className="w-4 h-4 text-slate-500" />
+      <div className="bg-slate-900/50 border border-slate-800/60 p-6 rounded-[32px] space-y-6 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-6 opacity-[0.03]">
+          <Target className="w-32 h-32" />
+        </div>
+
+        <div className="flex items-center justify-between relative z-10">
+          <div>
+            <h3 className="font-black text-lg">Budget Pulse</h3>
+            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Live Tracking • {budgetHealth.length} Enforced</p>
+          </div>
+          <div className="p-2 bg-slate-800/50 rounded-xl">
+             <Target className="w-4 h-4 text-indigo-400" />
           </div>
         </div>
-        <div className="space-y-6">
+
+        <div className="grid grid-cols-1 gap-6 relative z-10">
           {budgetHealth.length > 0 ? budgetHealth.map((item) => (
-            <div key={item.id} className="space-y-3 group">
+            <div key={item.id} className="space-y-2.5">
               <div className="flex justify-between items-end">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-3 h-3 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" style={{ backgroundColor: item.color }} />
+                <div className="flex items-center gap-3">
+                  <div className="w-1.5 h-6 rounded-full" style={{ backgroundColor: item.color }} />
                   <div>
-                    <span className="text-sm font-black text-white block leading-none mb-1">{item.name}</span>
+                    <span className="text-sm font-black text-white block">{item.name}</span>
                     <span className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">
-                      {formatCurrency(item.spent)} of {formatCurrency(item.budget)}
+                      {item.remaining > 0 ? `${formatCurrency(item.remaining)} left` : 'Limit Breached'}
                     </span>
                   </div>
                 </div>
                 <div className="text-right">
                   <span className={`text-xs font-black ${
                     item.status === 'critical' ? 'text-rose-500' : 
-                    item.status === 'warning' ? 'text-amber-500' : 'text-emerald-500'
+                    item.status === 'warning' ? 'text-amber-500' : 
+                    item.status === 'fast' ? 'text-amber-400' : 'text-emerald-500'
                   }`}>
                     {Math.round(item.percent)}%
                   </span>
-                  {item.status === 'critical' && <AlertCircle className="w-3 h-3 text-rose-500 inline ml-1 animate-pulse" />}
                 </div>
               </div>
-              <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-700/30 p-[2px]">
+              
+              <div className="w-full h-3 bg-slate-800/50 rounded-full overflow-hidden p-[2px] border border-slate-700/30">
                 <div 
-                  className={`h-full rounded-full transition-all duration-1000 ${
-                    item.status === 'critical' ? 'bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.5)]' : 
-                    item.status === 'warning' ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]' : 'bg-emerald-500'
+                  className={`h-full rounded-full transition-all duration-1000 ease-out shadow-lg ${
+                    item.status === 'critical' ? 'bg-gradient-to-r from-rose-600 to-rose-400' : 
+                    item.status === 'warning' ? 'bg-gradient-to-r from-amber-600 to-amber-400' : 
+                    item.status === 'fast' ? 'bg-gradient-to-r from-amber-500 to-amber-300' : 
+                    'bg-gradient-to-r from-emerald-600 to-emerald-400'
                   }`}
                   style={{ width: `${Math.min(100, item.percent)}%` }}
                 />
               </div>
+              
+              {item.status === 'fast' && (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <Zap className="w-2.5 h-2.5 text-amber-500" />
+                  <span className="text-[8px] font-black text-amber-500/80 uppercase tracking-widest">
+                    Spending faster than usual
+                  </span>
+                </div>
+              )}
             </div>
           )) : (
-            <div className="text-center py-8 space-y-3 border-2 border-dashed border-slate-800 rounded-2xl">
-              <p className="text-slate-600 text-sm font-bold italic">No active budget limits.</p>
-              <p className="text-[10px] text-slate-700 uppercase font-black tracking-widest">Enable in Settings (Config)</p>
+            <div className="text-center py-10 border-2 border-dashed border-slate-800 rounded-3xl">
+              <p className="text-slate-600 text-xs font-bold italic">No budgets configured yet.</p>
+              <button className="mt-3 text-[10px] font-black text-indigo-400 uppercase tracking-widest border border-indigo-400/20 px-4 py-2 rounded-xl">
+                Set Limits in Settings
+              </button>
             </div>
           )}
         </div>
       </div>
       
-      <div className="text-center pt-8 opacity-20">
-        <p className="text-[9px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-1.5">
-          Made with <Heart className="w-2.5 h-2.5 text-rose-500 fill-rose-500" /> by Infas
+      <div className="text-center pt-8 opacity-20 group cursor-default">
+        <p className="text-[9px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all group-hover:opacity-100">
+          Handcrafted with <Heart className="w-2.5 h-2.5 text-rose-500 fill-rose-500 animate-pulse" /> by Infas
         </p>
       </div>
     </div>
