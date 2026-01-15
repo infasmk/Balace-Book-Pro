@@ -3,7 +3,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Transaction, Category, TransactionType, AppSettings } from '../types';
 import { CURRENCY_SYMBOL } from '../constants';
 import { isToday, startOfMonth, endOfMonth, isWithinInterval, parseISO, differenceInDays, getDaysInMonth } from 'date-fns';
-import { TrendingUp, TrendingDown, Wallet, AlertCircle, Zap, Target, Heart, X, Sparkles, BellRing } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, AlertCircle, Zap, Target, Heart, X, Sparkles, BellRing, Instagram, ShieldCheck } from 'lucide-react';
 import { storageService } from '../services/storageService';
 
 interface DashboardProps {
@@ -148,20 +148,44 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
             <button onClick={closeWelcome} className="absolute top-4 right-4 p-2 text-slate-500 hover:text-white">
               <X className="w-5 h-5" />
             </button>
-            <div className="w-16 h-16 bg-indigo-600 rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-indigo-600/20">
+            <div className="w-16 h-16 bg-indigo-600 rounded-[28px] flex items-center justify-center mb-6 shadow-xl shadow-indigo-600/40">
               <Zap className="w-8 h-8 text-white" />
             </div>
-            <h2 className="text-2xl font-black text-white mb-2">Welcome to BalanceBook Pro</h2>
-            <p className="text-slate-400 text-sm leading-relaxed mb-6">
-              Track your daily spends, manage budgets, and take control of your savings effortlessly. 
-            </p>
+            <h2 className="text-2xl font-black text-white mb-1">Welcome to BalanceBook Pro</h2>
+            <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-4">Created by Infas & Team AWT</p>
+            
+            <div className="space-y-4 text-slate-400 text-sm leading-relaxed mb-6">
+              <p>
+                Track your spends with professional precision. Developed by <span className="text-white font-bold">Team AWT</span> — a collective offering premium, secure, and privacy-focused utility apps for free.
+              </p>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+                  <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                  No Data Collection • 100% Privacy
+                </div>
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                  High Performance • Fast Sync
+                </div>
+              </div>
+            </div>
+            
             <div className="space-y-3">
               <button 
                 onClick={closeWelcome}
-                className="w-full py-4 px-6 bg-indigo-600 rounded-2xl font-black text-white hover:bg-indigo-700 transition-colors"
+                className="w-full py-4 px-6 bg-indigo-600 rounded-2xl font-black text-white hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/20"
               >
                 Launch Dashboard
               </button>
+              <a 
+                href="https://instagram.com/infaaze" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="w-full py-4 px-6 bg-slate-800 border border-slate-700 rounded-2xl font-black text-white hover:bg-slate-700 transition-colors flex items-center justify-center gap-2"
+              >
+                <Instagram className="w-5 h-5 text-rose-500" />
+                Follow Developer (@infaaze)
+              </a>
             </div>
           </div>
         </div>

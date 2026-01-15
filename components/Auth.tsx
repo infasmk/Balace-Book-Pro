@@ -1,12 +1,13 @@
+
 import React, { useState } from 'react';
-import { Wallet, Shield, Zap, ArrowRight, User, Mail, Lock, ChevronLeft, Loader2 } from 'lucide-react';
+import { Wallet, Shield, Zap, ArrowRight, User, Mail, Lock, ChevronLeft, Loader2, Send } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 
 interface AuthProps {
   onLogin: (name: string, sessionUser?: any) => void;
 }
 
-type AuthMode = 'login' | 'signup' | 'reset';
+type AuthMode = 'login' | 'signup' | 'reset' | 'verify';
 
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [mode, setMode] = useState<AuthMode>('login');
@@ -32,10 +33,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { name } }
+          options: { 
+            data: { name },
+            emailRedirectTo: window.location.origin
+          }
         });
         if (error) throw error;
-        onLogin(name || data.user?.user_metadata?.name || 'User', data.user);
+        // Instead of logging in, show verification screen
+        setMode('verify');
       } else if (mode === 'login') {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -52,6 +57,34 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       setLoading(false);
     }
   };
+
+  if (mode === 'verify') {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+        <div className="w-full max-w-md space-y-8 relative z-10 text-center">
+          <div className="w-20 h-20 bg-emerald-600 rounded-[28px] mx-auto flex items-center justify-center shadow-2xl shadow-emerald-600/40 animate-pulse">
+            <Send className="w-10 h-10 text-white" />
+          </div>
+          <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[40px] border border-slate-800/50 shadow-2xl space-y-6">
+            <h2 className="text-2xl font-black text-white">Confirm Your Email</h2>
+            <div className="space-y-4 text-slate-400 text-sm font-medium leading-relaxed">
+              <p>We've sent a verification link to <span className="text-indigo-400">{email}</span>.</p>
+              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-amber-200 text-xs text-left">
+                <strong>Note:</strong> If you see a "localhost error" or "page not found" after clicking the button in your mail, don't worry! Just come back here and login with your details.
+              </div>
+              <p>Please check your inbox (and spam folder) to activate your account.</p>
+            </div>
+            <button
+              onClick={() => setMode('login')}
+              className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-lg shadow-xl shadow-indigo-600/20 hover:bg-indigo-500 transition-all"
+            >
+              Back to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 relative overflow-hidden">
@@ -176,7 +209,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 <Loader2 className="w-6 h-6 animate-spin" />
               ) : (
                 <>
-                  {mode === 'login' ? 'Login' : mode === 'signup' ? 'Sign Up' : 'Send Reset Link'} 
+                  {mode === 'login' ? 'Login' : mode === 'signup' ? 'Create Account' : 'Send Reset Link'} 
                   <ArrowRight className="w-5 h-5" />
                 </>
               )}
