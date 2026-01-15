@@ -3,7 +3,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Transaction, Category, TransactionType, AppSettings } from '../types';
 import { CURRENCY_SYMBOL } from '../constants';
 import { isToday, startOfMonth, endOfMonth, isWithinInterval, parseISO, differenceInDays, getDaysInMonth } from 'date-fns';
-import { TrendingUp, TrendingDown, Wallet, AlertCircle, Zap, Target, Heart, X, Sparkles, BellRing, Instagram, ShieldCheck } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, AlertCircle, Zap, Target, Heart, X, Sparkles, BellRing, Instagram, ShieldCheck, HelpCircle, ChevronRight, Info } from 'lucide-react';
 import { storageService } from '../services/storageService';
 
 interface DashboardProps {
@@ -11,6 +11,7 @@ interface DashboardProps {
   categories: Category[];
   settings: AppSettings;
   onNavigateToSettings: () => void;
+  isConnected: boolean | null;
 }
 
 const formatCurrency = (amount: number) => {
@@ -34,8 +35,9 @@ const StatCard = ({ title, amount, icon: Icon, colorClass, bgColorClass }: any) 
   </div>
 );
 
-const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, settings, onNavigateToSettings }) => {
+const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, settings, onNavigateToSettings, isConnected }) => {
   const [showWelcome, setShowWelcome] = useState(false);
+  const [tourStep, setTourStep] = useState(0); // 0: Welcome, 1: DB Info, 2: Tour Guide, 3+: Specific items
   const user = storageService.getUser();
 
   useEffect(() => {
@@ -49,6 +51,32 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
     setShowWelcome(false);
     localStorage.setItem('bbpro_welcome_seen', 'true');
   };
+
+  const nextStep = () => setTourStep(prev => prev + 1);
+
+  const tourContent = [
+    {
+      title: "Welcome to BalanceBook Pro",
+      subtitle: "Created by Infas & Team AWT",
+      description: "Team AWT offers premium, high-performance web tools for free with 100% privacy and no data tracking. Your vault is locally encrypted and secure.",
+      icon: <Zap className="w-8 h-8 text-white" />,
+      color: "bg-indigo-600"
+    },
+    {
+      title: "⚠️ Important: Connection",
+      subtitle: "Database Status Guide",
+      description: "In the header, look for the ⚡ icon. If it's GREEN, you are ready to save. If it's RED, please do NOT add transactions; reload the page until it turns green to ensure data sync.",
+      icon: <Zap className="w-8 h-8 text-white" />,
+      color: "bg-rose-600"
+    },
+    {
+      title: "Quick Tour: Features",
+      subtitle: "Navigating your Finance Hub",
+      description: "BalanceBook is divided into 4 key zones: Home (Insights), History (All logs), Stats (Visual charts), and Config (Backups & Settings).",
+      icon: <HelpCircle className="w-8 h-8 text-white" />,
+      color: "bg-emerald-600"
+    }
+  ];
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -143,40 +171,43 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
       </div>
 
       {showWelcome && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-lg">
-          <div className="bg-slate-900 border border-slate-800 rounded-[32px] p-8 max-w-md w-full relative animate-in zoom-in-95">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-lg">
+          <div className="bg-slate-900 border border-slate-800 rounded-[32px] p-8 max-w-md w-full relative animate-in zoom-in-95 shadow-2xl">
             <button onClick={closeWelcome} className="absolute top-4 right-4 p-2 text-slate-500 hover:text-white">
               <X className="w-5 h-5" />
             </button>
-            <div className="w-16 h-16 bg-indigo-600 rounded-[28px] flex items-center justify-center mb-6 shadow-xl shadow-indigo-600/40">
-              <Zap className="w-8 h-8 text-white" />
-            </div>
-            <h2 className="text-2xl font-black text-white mb-1">Welcome to BalanceBook Pro</h2>
-            <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-4">Created by Infas & Team AWT</p>
             
-            <div className="space-y-4 text-slate-400 text-sm leading-relaxed mb-6">
-              <p>
-                Track your spends with professional precision. Developed by <span className="text-white font-bold">Team AWT</span> — a collective offering premium, secure, and privacy-focused utility apps for free.
-              </p>
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
-                  <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                  No Data Collection • 100% Privacy
-                </div>
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
-                  <Zap className="w-4 h-4 text-amber-500" />
-                  High Performance • Fast Sync
-                </div>
+            <div className={`w-16 h-16 ${tourContent[tourStep]?.color || 'bg-indigo-600'} rounded-[24px] flex items-center justify-center mb-6 shadow-xl transition-colors duration-500`}>
+              {tourContent[tourStep]?.icon}
+            </div>
+            
+            <div className="space-y-4 mb-8">
+              <div>
+                <h2 className="text-2xl font-black text-white leading-tight">{tourContent[tourStep]?.title}</h2>
+                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mt-1">{tourContent[tourStep]?.subtitle}</p>
               </div>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                {tourContent[tourStep]?.description}
+              </p>
             </div>
-            
+
             <div className="space-y-3">
-              <button 
-                onClick={closeWelcome}
-                className="w-full py-4 px-6 bg-indigo-600 rounded-2xl font-black text-white hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/20"
-              >
-                Launch Dashboard
-              </button>
+              {tourStep < tourContent.length - 1 ? (
+                <button 
+                  onClick={nextStep}
+                  className="w-full py-4 bg-indigo-600 rounded-2xl font-black text-white hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
+                >
+                  Continue Tour <ChevronRight className="w-5 h-5" />
+                </button>
+              ) : (
+                <button 
+                  onClick={closeWelcome}
+                  className="w-full py-4 bg-indigo-600 rounded-2xl font-black text-white hover:bg-indigo-700 transition-all"
+                >
+                  Start Management
+                </button>
+              )}
+              
               <a 
                 href="https://instagram.com/infaaze" 
                 target="_blank" 
@@ -184,8 +215,14 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, setting
                 className="w-full py-4 px-6 bg-slate-800 border border-slate-700 rounded-2xl font-black text-white hover:bg-slate-700 transition-colors flex items-center justify-center gap-2"
               >
                 <Instagram className="w-5 h-5 text-rose-500" />
-                Follow Developer (@infaaze)
+                Follow Infas (@infaaze)
               </a>
+            </div>
+
+            <div className="flex justify-center gap-1.5 mt-6">
+              {tourContent.map((_, i) => (
+                <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === tourStep ? 'w-6 bg-indigo-500' : 'w-1.5 bg-slate-800'}`} />
+              ))}
             </div>
           </div>
         </div>

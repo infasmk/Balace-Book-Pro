@@ -11,16 +11,7 @@ import InstallPromptModal from './components/InstallPromptModal';
 import { ConfirmModal, Toast } from './components/CustomModals';
 import { Transaction, Category, AppSettings } from './types';
 import { storageService } from './services/storageService';
-import { DEFAULT_CATEGORIES } from './constants';
-
-interface BeforeInstallPromptEvent extends Event {
-  readonly platforms: string[];
-  readonly userChoice: Promise<{
-    outcome: 'accepted' | 'dismissed';
-    platform: string;
-  }>;
-  prompt(): Promise<void>;
-}
+import { supabase } from './services/supabaseClient';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -31,9 +22,7 @@ const App: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>(undefined);
   const [loading, setLoading] = useState(false);
-
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+  const [isConnected, setIsConnected] = useState<boolean | null>(null);
 
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => setToast({ message, type });
@@ -41,6 +30,25 @@ const App: React.FC = () => {
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean; title: string; message: string; onConfirm: () => void; type?: 'danger' | 'primary';
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+
+  useEffect(() => {
+    const checkConnection = async () => {
+      try {
+        const { error } = await supabase.from('transactions').select('id', { count: 'exact', head: true }).limit(1);
+        if (error && error.message.includes('fetch')) {
+          setIsConnected(false);
+        } else {
+          setIsConnected(true);
+        }
+      } catch (e) {
+        setIsConnected(false);
+      }
+    };
+
+    checkConnection();
+    const interval = setInterval(checkConnection, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const syncData = async () => {
@@ -116,6 +124,7 @@ const App: React.FC = () => {
       activeTab={activeTab} 
       setActiveTab={setActiveTab}
       onAddClick={() => { setEditingTransaction(undefined); setIsModalOpen(true); }}
+      isConnected={isConnected}
     >
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 animate-pulse">
@@ -130,6 +139,7 @@ const App: React.FC = () => {
               categories={categories} 
               settings={settings} 
               onNavigateToSettings={() => setActiveTab('settings')}
+              isConnected={isConnected}
             />
           )}
           {activeTab === 'history' && (

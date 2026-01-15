@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { 
   LayoutDashboard, 
   History, 
@@ -10,42 +10,22 @@ import {
   Zap,
   PlusCircle
 } from 'lucide-react';
-import { supabase } from '../services/supabaseClient';
 
 interface LayoutProps {
   children: React.ReactNode;
   activeTab: string;
   setActiveTab: (tab: string) => void;
   onAddClick: () => void;
+  isConnected: boolean | null;
 }
 
 const Layout: React.FC<LayoutProps> = ({ 
   children, 
   activeTab, 
   setActiveTab, 
-  onAddClick
+  onAddClick,
+  isConnected
 }) => {
-  const [isConnected, setIsConnected] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    const checkConnection = async () => {
-      try {
-        const { error } = await supabase.from('transactions').select('id', { count: 'exact', head: true }).limit(1);
-        if (error && error.message.includes('fetch')) {
-          setIsConnected(false);
-        } else {
-          setIsConnected(true);
-        }
-      } catch (e) {
-        setIsConnected(false);
-      }
-    };
-
-    checkConnection();
-    const interval = setInterval(checkConnection, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
   const navItems = [
     { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
     { id: 'history', label: 'History', icon: History },
@@ -128,7 +108,7 @@ const Layout: React.FC<LayoutProps> = ({
 
           <div className="p-8 border-t border-slate-800 text-center">
             <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] mb-1">Vault Secure</p>
-            <p className="text-[8px] text-slate-600 font-bold italic">© Infas • Web Bits</p>
+            <p className="text-[8px] text-slate-600 font-bold italic">© Infas • Team AWT</p>
           </div>
         </aside>
 
